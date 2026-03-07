@@ -4,8 +4,8 @@ on:
   push:
     branches:
       - '**'
-    tags-ignore:
-      - '**'
+    tags:
+      - 'v*'
   workflow_dispatch:
     inputs:
       publish_release:
@@ -32,7 +32,7 @@ jobs:
 
     steps:
       - name: Check out repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
 
       - name: Set up .NET SDK
         uses: actions/setup-dotnet@v5
@@ -44,16 +44,27 @@ jobs:
         shell: pwsh
         run: |
           $shortSha = "${env:GITHUB_SHA}".Substring(0, 7)
-          $safeRefName = "${env:GITHUB_REF_NAME}" -replace '[^0-9A-Za-z.-]', '-'
-          $packageVersion = "1.0.${env:GITHUB_RUN_NUMBER}"
-          $tagName = "build-$safeRefName-$shortSha"
-          $releaseName = "Preview build $packageVersion ($shortSha)"
-          $msiName = "timbre-$packageVersion-$shortSha-x64.msi"
-          $portableZipName = "timbre-$packageVersion-$shortSha-x64-portable.zip"
+          $isRelease = "${env:GITHUB_REF}" -match '^refs/tags/v(.+)$'
+
+          if ($isRelease) {
+            $version = $Matches[1]
+            $tagName = "v$version"
+            $releaseName = "v$version"
+            $msiName = "timbre-$version-x64.msi"
+            $portableZipName = "timbre-$version-x64-portable.zip"
+          }
+          else {
+            $version = "0.0.${env:GITHUB_RUN_NUMBER}"
+            $safeRefName = "${env:GITHUB_REF_NAME}" -replace '[^0-9A-Za-z.-]', '-'
+            $tagName = "preview-$safeRefName-$shortSha"
+            $releaseName = "Preview $version ($shortSha)"
+            $msiName = "timbre-$version-$shortSha-x64.msi"
+            $portableZipName = "timbre-$version-$shortSha-x64-portable.zip"
+          }
 
           "short_sha=$shortSha" >> $env:GITHUB_OUTPUT
-          "safe_ref_name=$safeRefName" >> $env:GITHUB_OUTPUT
-          "package_version=$packageVersion" >> $env:GITHUB_OUTPUT
+          "is_release=$isRelease" >> $env:GITHUB_OUTPUT
+          "package_version=$version" >> $env:GITHUB_OUTPUT
           "tag_name=$tagName" >> $env:GITHUB_OUTPUT
           "release_name=$releaseName" >> $env:GITHUB_OUTPUT
           "msi_name=$msiName" >> $env:GITHUB_OUTPUT
@@ -82,32 +93,61 @@ jobs:
       - name: Generate release notes
         shell: pwsh
         run: |
-          @(
-            "Preview build for commit ${{ github.sha }}.",
-            "",
-            "Branch: ${{ github.ref_name }}",
-            "MSI version: ${{ steps.metadata.outputs.package_version }}",
-            "Commit: ${{ steps.metadata.outputs.short_sha }}",
-            "",
-            "Assets:",
-            "- ${{ steps.metadata.outputs.msi_name }}",
-            "- ${{ steps.metadata.outputs.portable_zip_name }}"
-          ) | Set-Content -Path release-notes.md
+          $isRelease = '${{ steps.metadata.outputs.is_release }}' -eq 'True'
+
+          if ($isRelease) {
+            @(
+              "## Timbre ${{ steps.metadata.outputs.release_name }}",
+              "",
+              "Commit: ``${{ github.sha }}``",
+              "",
+              "### Assets",
+              "- ``${{ steps.metadata.outputs.msi_name }}`` — Windows installer",
+              "- ``${{ steps.metadata.outputs.portable_zip_name }}`` — Portable (no install required)"
+            ) | Set-Content -Path release-notes.md
+          }
+          else {
+            @(
+              "Preview build for commit ${{ github.sha }}.",
+              "",
+              "Branch: ${{ github.ref_name }}",
+              "MSI version: ${{ steps.metadata.outputs.package_version }}",
+              "Commit: ${{ steps.metadata.outputs.short_sha }}",
+              "",
+              "Assets:",
+              "- ${{ steps.metadata.outputs.msi_name }}",
+              "- ${{ steps.metadata.outputs.portable_zip_name }}"
+            ) | Set-Content -Path release-notes.md
+          }
 
       - name: Upload workflow artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         if: ${{ !env.ACT }}
         with:
-          name: timbre-preview-${{ steps.metadata.outputs.package_version }}-${{ steps.metadata.outputs.short_sha }}
+          name: timbre-${{ steps.metadata.outputs.package_version }}-${{ steps.metadata.outputs.short_sha }}
           path: |
             release/*.msi
             release/*.zip
             release-notes.md
           if-no-files-found: error
 
+      - name: Publish GitHub release
+        uses: softprops/action-gh-release@v2
+        if: ${{ steps.metadata.outputs.is_release == 'True' }}
+        with:
+          tag_name: ${{ steps.metadata.outputs.tag_name }}
+          name: ${{ steps.metadata.outputs.release_name }}
+          body_path: release-notes.md
+          prerelease: false
+          make_latest: true
+          fail_on_unmatched_files: true
+          files: |
+            release/*.msi
+            release/*.zip
+
       - name: Publish GitHub prerelease
         uses: softprops/action-gh-release@v2
-        if: ${{ github.event_name != 'workflow_dispatch' || inputs.publish_release }}
+        if: ${{ steps.metadata.outputs.is_release != 'True' && (github.event_name != 'workflow_dispatch' || inputs.publish_release) }}
         with:
           tag_name: ${{ steps.metadata.outputs.tag_name }}
           target_commitish: ${{ github.sha }}
