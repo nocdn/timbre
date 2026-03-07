@@ -1,0 +1,13 @@
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+  <Fragment>
+    <ComponentGroup Id="ApplicationFiles" Directory="INSTALLFOLDER">
+      <!--
+        Harvest the working x64 build output, not the publish folder.
+        The build output carries the generated .xbf/.pri files that WinUI needs at runtime.
+      -->
+      <Files Include="$(AppPayloadDir)\**">
+        <Exclude Files="$(AppPayloadDir)\**\*.pdb" />
+      </Files>
+    </ComponentGroup>
+  </Fragment>
+</Wix>

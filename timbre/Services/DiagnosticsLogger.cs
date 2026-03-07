@@ -1,6 +1,4 @@
 ﻿using System.Diagnostics;
-using System.Text;
-using timbre.Interop;
 
 namespace timbre.Services;
 
@@ -34,16 +32,6 @@ public static class DiagnosticsLogger
             _logFilePath = Path.Combine(
                 logDirectory,
                 $"startup-{DateTime.Now:yyyyMMdd-HHmmss}.log");
-
-            try
-            {
-                NativeMethods.AllocConsole();
-                Console.OutputEncoding = Encoding.UTF8;
-                Console.InputEncoding = Encoding.UTF8;
-            }
-            catch
-            {
-            }
 
             _initialized = true;
             WriteInternal("INFO", "Diagnostics initialized.");
@@ -113,14 +101,6 @@ public static class DiagnosticsLogger
 
         lock (SyncRoot)
         {
-            try
-            {
-                Console.WriteLine(line);
-            }
-            catch
-            {
-            }
-
             try
             {
                 if (!string.IsNullOrWhiteSpace(_logFilePath))

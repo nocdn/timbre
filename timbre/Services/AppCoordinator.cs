@@ -75,14 +75,7 @@ public sealed class AppCoordinator
             return;
         }
 
-        if (ShouldShowSettingsOnLaunch(_currentSettings))
-        {
-            await _mainWindow.ShowSettingsWindowAsync();
-        }
-        else
-        {
-            _mainWindow.HideToTray();
-        }
+        await _mainWindow.ShowSettingsWindowAsync();
     }
 
     public void ShowMainWindowFromActivation()
@@ -162,10 +155,5 @@ public sealed class AppCoordinator
         _trayIconService?.Dispose();
         _mainWindow.EnableClose();
         _mainWindow.Close();
-    }
-
-    private static bool ShouldShowSettingsOnLaunch(AppSettings settings)
-    {
-        return !settings.HasCompletedInitialSetup || string.IsNullOrWhiteSpace(settings.GroqApiKey);
     }
 }

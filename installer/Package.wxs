@@ -1,0 +1,24 @@
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
+     xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui">
+  <Package
+    Name="Timbre"
+    Manufacturer="Bartek"
+    Version="$(PackageVersion)"
+    Scope="perMachine"
+    UpgradeCode="{AA7E4E98-4A1B-4B74-8C15-E0719D1B8A95}">
+
+    <MajorUpgrade DowngradeErrorMessage="A newer version of Timbre is already installed." />
+    <MediaTemplate EmbedCab="yes" CompressionLevel="high" />
+
+    <Property Id="ARPCOMMENTS" Value="Timbre is a Windows desktop dictation and transcription app." />
+
+    <ui:WixUI Id="WixUI_InstallDir" InstallDirectory="INSTALLFOLDER" />
+    <WixVariable Id="WixUILicenseRtf" Value="License.rtf" />
+    <UIRef Id="WixUI_ErrorProgressText" />
+
+    <Feature Id="MainFeature" Title="Timbre" Level="1">
+      <ComponentGroupRef Id="ApplicationFiles" />
+      <ComponentGroupRef Id="ApplicationShortcuts" />
+    </Feature>
+  </Package>
+</Wix>

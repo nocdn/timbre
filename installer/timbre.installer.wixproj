@@ -1,0 +1,36 @@
+<Project Sdk="WixToolset.Sdk/6.0.2">
+  <PropertyGroup>
+    <OutputType>Package</OutputType>
+    <InstallerPlatform>x64</InstallerPlatform>
+    <Cultures>en-us</Cultures>
+    <PackageVersion Condition="'$(PackageVersion)' == ''">1.0.0</PackageVersion>
+    <SkipAppPublish Condition="'$(SkipAppPublish)' == ''">false</SkipAppPublish>
+    <SuppressValidation>true</SuppressValidation>
+    <AppProject>..\timbre\timbre.csproj</AppProject>
+    <AppRuntimeIdentifier>win-x64</AppRuntimeIdentifier>
+    <!--
+      Use the x64 build output instead of dotnet publish output.
+      This WinUI app needs generated files such as App.xbf, MainWindow.xbf, and timbre.pri.
+      The build output contains the working layout; packaging the publish folder caused the
+      installed app to fail at startup with a XamlParseException.
+    -->
+    <AppPayloadDir>$(MSBuildProjectDirectory)\..\timbre\bin\$(InstallerPlatform)\$(Configuration)\net8.0-windows10.0.19041.0\$(AppRuntimeIdentifier)</AppPayloadDir>
+    <DefineConstants>$(DefineConstants);AppPayloadDir=$(AppPayloadDir);PackageVersion=$(PackageVersion)</DefineConstants>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="WixToolset.UI.wixext" Version="6.0.2" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\timbre\timbre.csproj" />
+  </ItemGroup>
+
+  <Target Name="PublishApplication" BeforeTargets="Build" Condition="'$(SkipAppPublish)' != 'true'">
+    <!--
+      Build the app into the payload directory above. Do not swap this back to `dotnet publish`
+      unless you have verified the installed MSI still includes the generated WinUI artifacts.
+    -->
+    <Exec Command="&quot;C:\Program Files\dotnet\dotnet.exe&quot; build &quot;$(AppProject)&quot; -c $(Configuration) -p:Platform=$(InstallerPlatform) -p:RuntimeIdentifier=$(AppRuntimeIdentifier) -p:SelfContained=true" />
+  </Target>
+</Project>

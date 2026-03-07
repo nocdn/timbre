@@ -103,6 +103,12 @@ public sealed class KeyboardHookService : IDisposable
         var keyboardData = Marshal.PtrToStructure<NativeMethods.KBDLLHOOKSTRUCT>(lParam);
         var message = unchecked((uint)wParam.ToInt64());
 
+        const uint LLKHF_INJECTED = 0x00000010;
+        if ((keyboardData.flags & LLKHF_INJECTED) != 0)
+        {
+            return NativeMethods.CallNextHookEx(_hookHandle, nCode, wParam, lParam);
+        }
+
         var handled = message switch
         {
             NativeMethods.WM_KEYDOWN or NativeMethods.WM_SYSKEYDOWN => HandleKeyDown(keyboardData.vkCode),
@@ -161,7 +167,7 @@ public sealed class KeyboardHookService : IDisposable
             _dispatcherQueue.TryEnqueue(() => RecordingHotkeyEnded?.Invoke(this, EventArgs.Empty));
         }
 
-        if (pasteLastTranscriptComboWasActive && !IsAnyHotkeyKeyStillPressed(_pasteLastTranscriptHotkey))
+        if (pasteLastTranscriptComboWasActive && virtualKeyCode == _pasteLastTranscriptHotkey.KeyCode)
         {
             _pasteLastTranscriptComboActive = false;
         }
