@@ -1,0 +1,118 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Window
+    x:Class="whisper_windows.MainWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:local="using:whisper_windows"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    Title="Whisper Windows Settings"
+    mc:Ignorable="d">
+
+    <Grid
+        x:Name="RootGrid"
+        Padding="24"
+        RowSpacing="16">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <ScrollViewer Grid.Row="0">
+            <StackPanel Spacing="16">
+                <TextBlock
+                    Text="Settings"
+                    Style="{ThemeResource TitleTextBlockStyle}" />
+
+                <TextBlock
+                    Text="Choose the microphone, hotkey, recording mode, Groq model, and API key used for background dictation."
+                    TextWrapping="WrapWholeWords" />
+
+                <ComboBox
+                    x:Name="InputDeviceComboBox"
+                    Header="Input device"
+                    DisplayMemberPath="DisplayName"
+                    PlaceholderText="Select a microphone" />
+
+                <StackPanel Spacing="6">
+                    <TextBlock Text="Hotkey" />
+                    <Button
+                        x:Name="HotkeyCaptureButton"
+                        HorizontalAlignment="Left"
+                        Click="HotkeyCaptureButton_Click" />
+                    <TextBlock
+                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                        Text="Click the button, then press the new hotkey. Modifier keys are supported."
+                        TextWrapping="WrapWholeWords" />
+                </StackPanel>
+
+                <StackPanel Spacing="6">
+                    <TextBlock Text="Paste last transcript hotkey" />
+                    <Button
+                        x:Name="PasteLastTranscriptHotkeyCaptureButton"
+                        HorizontalAlignment="Left"
+                        Click="PasteLastTranscriptHotkeyCaptureButton_Click" />
+                    <TextBlock
+                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                        Text="Pressing this hotkey pastes the most recent completed transcript into the active text field."
+                        TextWrapping="WrapWholeWords" />
+                </StackPanel>
+
+                <StackPanel Spacing="6">
+                    <NumberBox
+                        x:Name="TranscriptHistoryLimitNumberBox"
+                        Header="Save transcript history"
+                        Minimum="0"
+                        Maximum="500"
+                        SmallChange="1"
+                        SpinButtonPlacementMode="Compact" />
+                    <TextBlock
+                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                        Text="Maximum transcripts to keep on disk. The oldest entries are removed first."
+                        TextWrapping="WrapWholeWords" />
+                </StackPanel>
+
+                <StackPanel Spacing="6">
+                    <ToggleSwitch
+                        x:Name="PushToTalkToggle"
+                        Header="Push to talk" />
+                    <TextBlock
+                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                        Text="While this is on, your voice will be recorded while the hotkey is held down, and transcribed and pasted after you let go. With it off, you will need to press the hotkey once to start recording, and press it again to stop recording, transcribe and paste."
+                        TextWrapping="WrapWholeWords" />
+                </StackPanel>
+
+                <PasswordBox
+                    x:Name="GroqApiKeyBox"
+                    Header="Groq API key" />
+
+                <ComboBox
+                    x:Name="GroqModelComboBox"
+                    Header="Groq Model"
+                    PlaceholderText="Select a Groq model" />
+            </StackPanel>
+        </ScrollViewer>
+
+        <Grid
+            Grid.Row="1"
+            ColumnSpacing="12">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+
+            <TextBlock
+                x:Name="StatusTextBlock"
+                VerticalAlignment="Center"
+                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                TextWrapping="WrapWholeWords" />
+
+            <Button
+                x:Name="SaveButton"
+                Grid.Column="1"
+                HorizontalAlignment="Right"
+                Click="SaveButton_Click"
+                Content="Save" />
+        </Grid>
+    </Grid>
+</Window>
