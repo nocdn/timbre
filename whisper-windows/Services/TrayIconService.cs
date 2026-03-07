@@ -10,7 +10,7 @@ public sealed class TrayIconService : IDisposable
     private const uint TrayIconId = 1;
     private const uint SettingsCommandId = 1001;
     private const uint QuitCommandId = 1002;
-    private const string AppName = "Whisper Windows";
+    private const string AppName = "Timbre";
 
     private readonly Func<Task> _openSettingsAsync;
     private readonly Action _quit;

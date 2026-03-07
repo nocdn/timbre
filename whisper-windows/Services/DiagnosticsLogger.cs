@@ -7,6 +7,8 @@ namespace whisper_windows.Services;
 public static class DiagnosticsLogger
 {
     private static readonly object SyncRoot = new();
+    private const string CurrentAppDataFolderName = "Timbre";
+    private const string LegacyAppDataFolderName = "WhisperWindows";
     private static string? _logFilePath;
     private static bool _initialized;
 
@@ -23,10 +25,11 @@ public static class DiagnosticsLogger
 
             var logDirectory = Path.Combine(
                 Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                "WhisperWindows",
+                CurrentAppDataFolderName,
                 "logs");
 
             Directory.CreateDirectory(logDirectory);
+            MigrateLegacyLogs(logDirectory);
 
             _logFilePath = Path.Combine(
                 logDirectory,
@@ -46,6 +49,14 @@ public static class DiagnosticsLogger
             WriteInternal("INFO", "Diagnostics initialized.");
             WriteInternal("INFO", $"Log file: {_logFilePath}");
         }
+    }
+
+    public static string GetAppDataDirectory()
+    {
+        var localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+        var timbreDirectory = Path.Combine(localAppData, CurrentAppDataFolderName);
+        Directory.CreateDirectory(timbreDirectory);
+        return timbreDirectory;
     }
 
     public static void HookGlobalExceptionLogging()
@@ -122,6 +133,28 @@ public static class DiagnosticsLogger
             }
 
             Debug.WriteLine(line);
+        }
+    }
+
+    private static void MigrateLegacyLogs(string newLogDirectory)
+    {
+        var localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+        var legacyLogDirectory = Path.Combine(localAppData, LegacyAppDataFolderName, "logs");
+
+        if (!Directory.Exists(legacyLogDirectory))
+        {
+            return;
+        }
+
+        foreach (var legacyLogPath in Directory.EnumerateFiles(legacyLogDirectory, "*.log"))
+        {
+            var destinationPath = Path.Combine(newLogDirectory, Path.GetFileName(legacyLogPath));
+            if (File.Exists(destinationPath))
+            {
+                continue;
+            }
+
+            File.Copy(legacyLogPath, destinationPath);
         }
     }
 }

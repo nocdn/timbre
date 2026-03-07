@@ -15,7 +15,7 @@
   <mp:PhoneIdentity PhoneProductId="c9e01e1b-8d2b-4197-babc-8b0f56eb36cd" PhonePublisherId="00000000-0000-0000-0000-000000000000"/>
 
   <Properties>
-    <DisplayName>Whisper Windows</DisplayName>
+    <DisplayName>Timbre</DisplayName>
     <PublisherDisplayName>bartek</PublisherDisplayName>
     <Logo>Assets\StoreLogo.png</Logo>
   </Properties>
@@ -34,8 +34,8 @@
       Executable="$targetnametoken$.exe"
       EntryPoint="$targetentrypoint$">
       <uap:VisualElements
-        DisplayName="Whisper Windows"
-        Description="Whisper Windows"
+        DisplayName="Timbre"
+        Description="Timbre"
         BackgroundColor="transparent"
         Square150x150Logo="Assets\Square150x150Logo.png"
         Square44x44Logo="Assets\Square44x44Logo.png">

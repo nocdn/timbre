@@ -27,11 +27,6 @@ public static class HotkeyValidationService
             return;
         }
 
-        if (!hotkey.Control && !hotkey.Shift && !hotkey.Alt && !hotkey.Windows)
-        {
-            result.Errors.Add($"{label} hotkey must include at least one modifier key.");
-        }
-
         if (hotkey.Windows)
         {
             result.Warnings.Add($"{label} hotkey uses the Windows key, which can conflict with system shortcuts.");

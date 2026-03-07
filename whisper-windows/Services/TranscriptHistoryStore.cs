@@ -20,9 +20,8 @@ public sealed class TranscriptHistoryStore : ITranscriptHistoryStore
 
     public TranscriptHistoryStore()
     {
-        var settingsDirectory = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "WhisperWindows");
+        var settingsDirectory = DiagnosticsLogger.GetAppDataDirectory();
+        MigrateLegacyHistoryFile(settingsDirectory);
 
         Directory.CreateDirectory(settingsDirectory);
         _historyPath = Path.Combine(settingsDirectory, "transcript-history.json");
@@ -237,5 +236,19 @@ public sealed class TranscriptHistoryStore : ITranscriptHistoryStore
         }
 
         return entries.Skip(entries.Count - maxEntries).ToList();
+    }
+
+    private static void MigrateLegacyHistoryFile(string settingsDirectory)
+    {
+        var localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+        var legacyHistoryPath = Path.Combine(localAppData, "WhisperWindows", "transcript-history.json");
+        var newHistoryPath = Path.Combine(settingsDirectory, "transcript-history.json");
+
+        if (!File.Exists(legacyHistoryPath) || File.Exists(newHistoryPath))
+        {
+            return;
+        }
+
+        File.Copy(legacyHistoryPath, newHistoryPath);
     }
 }

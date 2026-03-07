@@ -6,7 +6,7 @@
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     mc:Ignorable="d"
-    Title="Whisper Windows Settings">
+    Title="Timbre Settings">
 
     <Grid
         x:Name="RootGrid"
@@ -20,7 +20,7 @@
         <ScrollViewer Grid.Row="0">
             <StackPanel Spacing="16">
                 <TextBlock
-                    Text="Whisper Windows"
+                    Text="Timbre"
                     Style="{ThemeResource TitleTextBlockStyle}" />
 
                 <TextBlock
@@ -56,7 +56,7 @@
                                 Click="HotkeyCaptureButton_Click" />
                             <TextBlock
                                 Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                Text="Click the button, then press the new hotkey. Use at least one modifier key."
+                                Text="Click the button, then press the new hotkey."
                                 TextWrapping="WrapWholeWords" />
                         </StackPanel>
 

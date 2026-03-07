@@ -71,7 +71,7 @@ public sealed partial class MainWindow : Window
 
     private void ConfigureWindowAppearance()
     {
-        Title = "Whisper Windows Settings";
+        Title = "Timbre Settings";
 
         var windowId = Microsoft.UI.Win32Interop.GetWindowIdFromWindow(_windowHandle);
         var appWindow = AppWindow.GetFromWindowId(windowId);

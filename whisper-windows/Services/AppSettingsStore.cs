@@ -8,7 +8,8 @@ namespace whisper_windows.Services;
 
 public sealed class AppSettingsStore : IAppSettingsStore
 {
-    private static readonly byte[] Entropy = Encoding.UTF8.GetBytes("whisper-windows-settings");
+    private static readonly byte[] Entropy = Encoding.UTF8.GetBytes("timbre-settings");
+    private static readonly byte[] LegacyEntropy = Encoding.UTF8.GetBytes("whisper-windows-settings");
     private readonly JsonSerializerOptions _serializerOptions = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
@@ -23,9 +24,8 @@ public sealed class AppSettingsStore : IAppSettingsStore
 
     public AppSettingsStore()
     {
-        var settingsDirectory = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "WhisperWindows");
+        var settingsDirectory = DiagnosticsLogger.GetAppDataDirectory();
+        MigrateLegacySettingsFile(settingsDirectory);
 
         Directory.CreateDirectory(settingsDirectory);
         _settingsPath = Path.Combine(settingsDirectory, "settings.json");
@@ -180,8 +180,30 @@ public sealed class AppSettingsStore : IAppSettingsStore
         }
 
         var protectedBytes = Convert.FromBase64String(value);
-        var plainBytes = ProtectedData.Unprotect(protectedBytes, Entropy, DataProtectionScope.CurrentUser);
-        return Encoding.UTF8.GetString(plainBytes);
+        try
+        {
+            var plainBytes = ProtectedData.Unprotect(protectedBytes, Entropy, DataProtectionScope.CurrentUser);
+            return Encoding.UTF8.GetString(plainBytes);
+        }
+        catch (CryptographicException)
+        {
+            var plainBytes = ProtectedData.Unprotect(protectedBytes, LegacyEntropy, DataProtectionScope.CurrentUser);
+            return Encoding.UTF8.GetString(plainBytes);
+        }
+    }
+
+    private static void MigrateLegacySettingsFile(string settingsDirectory)
+    {
+        var localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+        var legacySettingsPath = Path.Combine(localAppData, "WhisperWindows", "settings.json");
+        var newSettingsPath = Path.Combine(settingsDirectory, "settings.json");
+
+        if (!File.Exists(legacySettingsPath) || File.Exists(newSettingsPath))
+        {
+            return;
+        }
+
+        File.Copy(legacySettingsPath, newSettingsPath);
     }
 
     private sealed class StoredSettings

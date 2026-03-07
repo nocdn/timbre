@@ -78,7 +78,7 @@ public static class Program
     private static bool DecideRedirection()
     {
         var args = AppInstance.GetCurrent().GetActivatedEventArgs();
-        var keyInstance = AppInstance.FindOrRegisterForKey("WhisperWindowsSingleInstance");
+        var keyInstance = AppInstance.FindOrRegisterForKey("TimbreSingleInstance");
 
         if (keyInstance.IsCurrent)
         {
