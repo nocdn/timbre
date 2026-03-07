@@ -102,8 +102,8 @@ jobs:
               "Commit: ``${{ github.sha }}``",
               "",
               "### Assets",
-              "- ``${{ steps.metadata.outputs.msi_name }}`` — Windows installer",
-              "- ``${{ steps.metadata.outputs.portable_zip_name }}`` — Portable (no install required)"
+              "- ``${{ steps.metadata.outputs.msi_name }}`` - Windows installer",
+              "- ``${{ steps.metadata.outputs.portable_zip_name }}`` - Portable (no install required)"
             ) | Set-Content -Path release-notes.md
           }
           else {
