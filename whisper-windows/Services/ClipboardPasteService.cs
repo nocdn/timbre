@@ -3,6 +3,7 @@ using System.Runtime.InteropServices;
 using System.Text;
 using Microsoft.UI.Dispatching;
 using whisper_windows.Interop;
+using whisper_windows.Models;
 
 namespace whisper_windows.Services;
 
@@ -15,7 +16,7 @@ public sealed class ClipboardPasteService
         _dispatcherQueue = dispatcherQueue;
     }
 
-    public Task PasteTextAsync(string text)
+    public Task PasteTextAsync(string text, HotkeyBinding? triggeringHotkey = null)
     {
         if (string.IsNullOrWhiteSpace(text))
         {
@@ -31,6 +32,12 @@ public sealed class ClipboardPasteService
                 DiagnosticsLogger.Info($"PasteTextAsync entered. TextLength={text.Length}.");
                 SetClipboardText(text);
                 DiagnosticsLogger.Info("Clipboard text set successfully.");
+
+                if (triggeringHotkey is not null)
+                {
+                    ReleaseHotkey(triggeringHotkey);
+                    await Task.Delay(30);
+                }
 
                 await Task.Delay(100);
                 SendPasteShortcut();
@@ -138,5 +145,35 @@ public sealed class ClipboardPasteService
         Thread.Sleep(15);
         NativeMethods.keybd_event((byte)NativeMethods.VK_LCONTROL, 0, NativeMethods.KEYEVENTF_KEYUP, UIntPtr.Zero);
         DiagnosticsLogger.Info("keybd_event Ctrl+V sequence completed.");
+    }
+
+    private static void ReleaseHotkey(HotkeyBinding hotkey)
+    {
+        DiagnosticsLogger.Info($"Releasing triggering hotkey '{hotkey.ToDisplayString()}' before paste.");
+        NativeMethods.keybd_event((byte)hotkey.KeyCode, 0, NativeMethods.KEYEVENTF_KEYUP, UIntPtr.Zero);
+
+        if (hotkey.Shift)
+        {
+            NativeMethods.keybd_event((byte)NativeMethods.VK_LSHIFT, 0, NativeMethods.KEYEVENTF_KEYUP, UIntPtr.Zero);
+            NativeMethods.keybd_event((byte)NativeMethods.VK_RSHIFT, 0, NativeMethods.KEYEVENTF_KEYUP, UIntPtr.Zero);
+        }
+
+        if (hotkey.Alt)
+        {
+            NativeMethods.keybd_event((byte)NativeMethods.VK_LMENU, 0, NativeMethods.KEYEVENTF_KEYUP, UIntPtr.Zero);
+            NativeMethods.keybd_event((byte)NativeMethods.VK_RMENU, 0, NativeMethods.KEYEVENTF_KEYUP, UIntPtr.Zero);
+        }
+
+        if (hotkey.Control)
+        {
+            NativeMethods.keybd_event((byte)NativeMethods.VK_LCONTROL, 0, NativeMethods.KEYEVENTF_KEYUP, UIntPtr.Zero);
+            NativeMethods.keybd_event((byte)NativeMethods.VK_RCONTROL, 0, NativeMethods.KEYEVENTF_KEYUP, UIntPtr.Zero);
+        }
+
+        if (hotkey.Windows)
+        {
+            NativeMethods.keybd_event((byte)NativeMethods.VK_LWIN, 0, NativeMethods.KEYEVENTF_KEYUP, UIntPtr.Zero);
+            NativeMethods.keybd_event((byte)NativeMethods.VK_RWIN, 0, NativeMethods.KEYEVENTF_KEYUP, UIntPtr.Zero);
+        }
     }
 }

@@ -158,7 +158,7 @@ public partial class App : Application
             return;
         }
 
-        await _dictationController.PasteLastTranscriptAsync();
+        await _dictationController.PasteLastTranscriptAsync(_currentSettings.PasteLastTranscriptHotkey);
     }
 
     private void OnSettingsSaved(AppSettings settings)

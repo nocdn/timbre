@@ -239,7 +239,7 @@ public sealed class DictationController : IDisposable
         }
     }
 
-    public async Task<bool> PasteLastTranscriptAsync()
+    public async Task<bool> PasteLastTranscriptAsync(HotkeyBinding? triggeringHotkey = null)
     {
         DiagnosticsLogger.Info("PasteLastTranscriptAsync entered.");
         string? lastTranscript = null;
@@ -273,7 +273,7 @@ public sealed class DictationController : IDisposable
 
         try
         {
-            await _clipboardPasteService.PasteTextAsync(lastTranscript);
+            await _clipboardPasteService.PasteTextAsync(lastTranscript, triggeringHotkey);
             DiagnosticsLogger.Info("PasteLastTranscriptAsync completed successfully.");
             return true;
         }

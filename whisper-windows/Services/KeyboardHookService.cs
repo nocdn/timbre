@@ -136,6 +136,7 @@ public sealed class KeyboardHookService : IDisposable
         if (IsHotkeyPressed(_pasteLastTranscriptHotkey) && !_pasteLastTranscriptComboActive)
         {
             _pasteLastTranscriptComboActive = true;
+            _dispatcherQueue.TryEnqueue(() => PasteLastTranscriptHotkeyPressed?.Invoke(this, EventArgs.Empty));
         }
 
         return (matchesRecordingMainKey && ModifiersExactlyMatch(_recordingHotkey)) ||
@@ -163,7 +164,6 @@ public sealed class KeyboardHookService : IDisposable
         if (pasteLastTranscriptComboWasActive && !IsAnyHotkeyKeyStillPressed(_pasteLastTranscriptHotkey))
         {
             _pasteLastTranscriptComboActive = false;
-            _dispatcherQueue.TryEnqueue(() => PasteLastTranscriptHotkeyPressed?.Invoke(this, EventArgs.Empty));
         }
 
         if (_isCapturingHotkey)
