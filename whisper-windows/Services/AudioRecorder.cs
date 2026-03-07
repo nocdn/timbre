@@ -1,6 +1,7 @@
 using NAudio.CoreAudioApi;
 using NAudio.Utils;
 using NAudio.Wave;
+using NAudio.Wave.SampleProviders;
 
 namespace whisper_windows.Services;
 
@@ -88,7 +89,7 @@ public sealed class AudioRecorder : IDisposable
             LastCompletedDeviceName = DeviceName;
             LastCompletedWaveFormatDescription = WaveFormatDescription;
             LastCompletedBytesCaptured = BytesCaptured;
-            var audioBytes = _recordedStream?.ToArray() ?? [];
+            var audioBytes = DownsampleTo16KhzMono(_recordedStream?.ToArray() ?? []);
             Cleanup();
 
             if (eventArgs.Exception is not null)
@@ -129,5 +130,60 @@ public sealed class AudioRecorder : IDisposable
         WaveFormatDescription = null;
         BytesCaptured = 0;
         IsRecording = false;
+    }
+
+    private static byte[] DownsampleTo16KhzMono(byte[] inputBytes)
+    {
+        if (inputBytes.Length == 0)
+        {
+            return inputBytes;
+        }
+
+        using var inputStream = new MemoryStream(inputBytes);
+        using var reader = new WaveFileReader(inputStream);
+        var sampleProvider = reader.ToSampleProvider();
+        ISampleProvider resampledProvider = sampleProvider;
+
+        if (sampleProvider.WaveFormat.SampleRate != 16000)
+        {
+            resampledProvider = new WdlResamplingSampleProvider(resampledProvider, 16000);
+        }
+
+        if (resampledProvider.WaveFormat.Channels > 1)
+        {
+            var monoProvider = new StereoToMonoSampleProvider(resampledProvider);
+            monoProvider.LeftVolume = 0.5f;
+            monoProvider.RightVolume = 0.5f;
+            resampledProvider = monoProvider;
+        }
+
+        using var outputStream = new MemoryStream();
+        using (var writer = new WaveFileWriter(outputStream, new WaveFormat(16000, 16, 1)))
+        {
+            var buffer = new float[16000];
+            var convertedBuffer = new byte[buffer.Length * 2];
+
+            while (true)
+            {
+                var samplesRead = resampledProvider.Read(buffer, 0, buffer.Length);
+                if (samplesRead == 0)
+                {
+                    break;
+                }
+
+                for (var i = 0; i < samplesRead; i++)
+                {
+                    var sample = (short)Math.Clamp(buffer[i] * short.MaxValue, short.MinValue, short.MaxValue);
+                    convertedBuffer[(i * 2)] = (byte)(sample & 0xFF);
+                    convertedBuffer[(i * 2) + 1] = (byte)((sample >> 8) & 0xFF);
+                }
+
+                writer.Write(convertedBuffer, 0, samplesRead * 2);
+            }
+
+            writer.Flush();
+        }
+
+        return outputStream.ToArray();
     }
 }

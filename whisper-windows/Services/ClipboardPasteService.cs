@@ -1,58 +1,95 @@
 using System.ComponentModel;
 using System.Runtime.InteropServices;
 using System.Text;
-using Microsoft.UI.Dispatching;
+using whisper_windows.Interfaces;
 using whisper_windows.Interop;
 using whisper_windows.Models;
 
 namespace whisper_windows.Services;
 
-public sealed class ClipboardPasteService
+public sealed class ClipboardPasteService : IClipboardPasteService
 {
-    private readonly DispatcherQueue _dispatcherQueue;
+    private readonly IUiDispatcherQueueAccessor _dispatcherQueueAccessor;
 
-    public ClipboardPasteService(DispatcherQueue dispatcherQueue)
+    public ClipboardPasteService(IUiDispatcherQueueAccessor dispatcherQueueAccessor)
     {
-        _dispatcherQueue = dispatcherQueue;
+        _dispatcherQueueAccessor = dispatcherQueueAccessor;
     }
 
-    public Task PasteTextAsync(string text, HotkeyBinding? triggeringHotkey = null)
+    public Task CopyTextAsync(string text, CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(text))
         {
             throw new InvalidOperationException("The transcription was empty.");
         }
 
-        var completionSource = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-
-        if (!_dispatcherQueue.TryEnqueue(async () =>
+        return RunOnUiThreadAsync(() =>
         {
+            cancellationToken.ThrowIfCancellationRequested();
+            SetClipboardText(text);
+            DiagnosticsLogger.Info($"Clipboard text copied successfully. TextLength={text.Length}.");
+            return Task.CompletedTask;
+        });
+    }
+
+    public Task PasteTextAsync(string text, HotkeyBinding? triggeringHotkey = null, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            throw new InvalidOperationException("The transcription was empty.");
+        }
+
+        return RunOnUiThreadAsync(async () =>
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            DiagnosticsLogger.Info($"PasteTextAsync entered. TextLength={text.Length}.");
+            SetClipboardText(text);
+            DiagnosticsLogger.Info("Clipboard text set successfully.");
+
+            if (triggeringHotkey is not null)
+            {
+                SendInputEvents(CreateReleaseHotkeyInputs(triggeringHotkey));
+                await Task.Delay(30, cancellationToken);
+            }
+
+            await Task.Delay(75, cancellationToken);
             try
             {
-                DiagnosticsLogger.Info($"PasteTextAsync entered. TextLength={text.Length}.");
-                SetClipboardText(text);
-                DiagnosticsLogger.Info("Clipboard text set successfully.");
-
-                if (triggeringHotkey is not null)
-                {
-                    ReleaseHotkey(triggeringHotkey);
-                    await Task.Delay(30);
-                }
-
-                await Task.Delay(100);
-                SendPasteShortcut();
-                DiagnosticsLogger.Info("Ctrl+V simulation completed.");
-
-                completionSource.TrySetResult();
+                SendInputEvents(CreatePasteShortcutInputs());
+                DiagnosticsLogger.Info("SendInput Ctrl+V sequence completed.");
             }
-            catch (Exception exception)
+            catch (Win32Exception exception) when (exception.NativeErrorCode == 87)
             {
-                DiagnosticsLogger.Error("PasteTextAsync failed.", exception);
-                completionSource.TrySetException(exception);
+                DiagnosticsLogger.Info("SendInput returned Win32 error 87. Falling back to WM_PASTE.");
+                SendPasteMessage();
             }
-        }))
+        });
+    }
+
+    private Task RunOnUiThreadAsync(Func<Task> action)
+    {
+        var dispatcherQueue = _dispatcherQueueAccessor.DispatcherQueue;
+        if (dispatcherQueue is null)
         {
-            completionSource.TrySetException(new InvalidOperationException("The UI thread was unavailable for clipboard paste."));
+            return action();
+        }
+
+        var completionSource = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        if (!dispatcherQueue.TryEnqueue(async () =>
+            {
+                try
+                {
+                    await action();
+                    completionSource.TrySetResult();
+                }
+                catch (Exception exception)
+                {
+                    completionSource.TrySetException(exception);
+                }
+            }))
+        {
+            completionSource.TrySetException(new InvalidOperationException("The UI thread was unavailable for clipboard operations."));
         }
 
         return completionSource.Task;
@@ -133,47 +170,92 @@ public sealed class ClipboardPasteService
         throw new Win32Exception(lastError, "Failed to open the clipboard after multiple attempts.");
     }
 
-    private static void SendPasteShortcut()
+    private static void SendInputEvents(NativeMethods.INPUT[] inputs)
     {
-        var foregroundWindow = NativeMethods.GetForegroundWindow();
-        DiagnosticsLogger.Info($"Sending Ctrl+V to foreground window 0x{foregroundWindow.ToInt64():X}.");
-        NativeMethods.keybd_event((byte)NativeMethods.VK_LCONTROL, 0, 0, UIntPtr.Zero);
-        Thread.Sleep(15);
-        NativeMethods.keybd_event((byte)NativeMethods.VK_V, 0, 0, UIntPtr.Zero);
-        Thread.Sleep(15);
-        NativeMethods.keybd_event((byte)NativeMethods.VK_V, 0, NativeMethods.KEYEVENTF_KEYUP, UIntPtr.Zero);
-        Thread.Sleep(15);
-        NativeMethods.keybd_event((byte)NativeMethods.VK_LCONTROL, 0, NativeMethods.KEYEVENTF_KEYUP, UIntPtr.Zero);
-        DiagnosticsLogger.Info("keybd_event Ctrl+V sequence completed.");
+        var sent = NativeMethods.SendInput((uint)inputs.Length, inputs, Marshal.SizeOf<NativeMethods.INPUT>());
+        if (sent != inputs.Length)
+        {
+            var lastError = Marshal.GetLastWin32Error();
+            var exception = new Win32Exception(lastError, "Failed to send keyboard input.");
+            DiagnosticsLogger.Error($"SendInput failed. Requested={inputs.Length}, Sent={sent}, LastError={lastError}.", exception);
+            throw exception;
+        }
     }
 
-    private static void ReleaseHotkey(HotkeyBinding hotkey)
+    private static NativeMethods.INPUT[] CreatePasteShortcutInputs()
     {
-        DiagnosticsLogger.Info($"Releasing triggering hotkey '{hotkey.ToDisplayString()}' before paste.");
-        NativeMethods.keybd_event((byte)hotkey.KeyCode, 0, NativeMethods.KEYEVENTF_KEYUP, UIntPtr.Zero);
+        return
+        [
+            CreateKeyboardInput((ushort)NativeMethods.VK_CONTROL, false),
+            CreateKeyboardInput((ushort)'V', false),
+            CreateKeyboardInput((ushort)'V', true),
+            CreateKeyboardInput((ushort)NativeMethods.VK_CONTROL, true),
+        ];
+    }
+
+    private static NativeMethods.INPUT[] CreateReleaseHotkeyInputs(HotkeyBinding hotkey)
+    {
+        var inputs = new List<NativeMethods.INPUT>
+        {
+            CreateKeyboardInput((ushort)hotkey.KeyCode, true),
+        };
 
         if (hotkey.Shift)
         {
-            NativeMethods.keybd_event((byte)NativeMethods.VK_LSHIFT, 0, NativeMethods.KEYEVENTF_KEYUP, UIntPtr.Zero);
-            NativeMethods.keybd_event((byte)NativeMethods.VK_RSHIFT, 0, NativeMethods.KEYEVENTF_KEYUP, UIntPtr.Zero);
+            inputs.Add(CreateKeyboardInput((ushort)NativeMethods.VK_LSHIFT, true));
+            inputs.Add(CreateKeyboardInput((ushort)NativeMethods.VK_RSHIFT, true));
         }
 
         if (hotkey.Alt)
         {
-            NativeMethods.keybd_event((byte)NativeMethods.VK_LMENU, 0, NativeMethods.KEYEVENTF_KEYUP, UIntPtr.Zero);
-            NativeMethods.keybd_event((byte)NativeMethods.VK_RMENU, 0, NativeMethods.KEYEVENTF_KEYUP, UIntPtr.Zero);
+            inputs.Add(CreateKeyboardInput((ushort)NativeMethods.VK_LMENU, true));
+            inputs.Add(CreateKeyboardInput((ushort)NativeMethods.VK_RMENU, true));
         }
 
         if (hotkey.Control)
         {
-            NativeMethods.keybd_event((byte)NativeMethods.VK_LCONTROL, 0, NativeMethods.KEYEVENTF_KEYUP, UIntPtr.Zero);
-            NativeMethods.keybd_event((byte)NativeMethods.VK_RCONTROL, 0, NativeMethods.KEYEVENTF_KEYUP, UIntPtr.Zero);
+            inputs.Add(CreateKeyboardInput((ushort)NativeMethods.VK_LCONTROL, true));
+            inputs.Add(CreateKeyboardInput((ushort)NativeMethods.VK_RCONTROL, true));
         }
 
         if (hotkey.Windows)
         {
-            NativeMethods.keybd_event((byte)NativeMethods.VK_LWIN, 0, NativeMethods.KEYEVENTF_KEYUP, UIntPtr.Zero);
-            NativeMethods.keybd_event((byte)NativeMethods.VK_RWIN, 0, NativeMethods.KEYEVENTF_KEYUP, UIntPtr.Zero);
+            inputs.Add(CreateKeyboardInput((ushort)NativeMethods.VK_LWIN, true));
+            inputs.Add(CreateKeyboardInput((ushort)NativeMethods.VK_RWIN, true));
         }
+
+        return inputs.ToArray();
+    }
+
+    private static NativeMethods.INPUT CreateKeyboardInput(ushort virtualKey, bool keyUp)
+    {
+        return new NativeMethods.INPUT
+        {
+            type = NativeMethods.INPUT_KEYBOARD,
+            U = new NativeMethods.InputUnion
+            {
+                ki = new NativeMethods.KEYBDINPUT
+                {
+                    wVk = virtualKey,
+                    dwFlags = keyUp ? NativeMethods.KEYEVENTF_KEYUP : 0,
+                },
+            },
+        };
+    }
+
+    private static void SendPasteMessage()
+    {
+        var foregroundWindow = NativeMethods.GetForegroundWindow();
+        if (foregroundWindow == IntPtr.Zero)
+        {
+            throw new InvalidOperationException("There is no active window available for paste.");
+        }
+
+        if (!NativeMethods.PostMessage(foregroundWindow, NativeMethods.WM_PASTE, IntPtr.Zero, IntPtr.Zero))
+        {
+            throw new Win32Exception(Marshal.GetLastWin32Error(), "Failed to post a paste message to the active window.");
+        }
+
+        DiagnosticsLogger.Info($"WM_PASTE posted to foreground window 0x{foregroundWindow.ToInt64():X}.");
     }
 }

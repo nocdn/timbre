@@ -1,11 +1,12 @@
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using whisper_windows.Interfaces;
 using whisper_windows.Models;
 
 namespace whisper_windows.Services;
 
-public sealed class AppSettingsStore
+public sealed class AppSettingsStore : IAppSettingsStore
 {
     private static readonly byte[] Entropy = Encoding.UTF8.GetBytes("whisper-windows-settings");
     private readonly JsonSerializerOptions _serializerOptions = new()
@@ -14,8 +15,11 @@ public sealed class AppSettingsStore
         PropertyNameCaseInsensitive = true,
         WriteIndented = true,
     };
+    private readonly SemaphoreSlim _stateLock = new(1, 1);
 
     private readonly string _settingsPath;
+    private AppSettings _currentSettings = new();
+    private bool _hasLoadedSettings;
 
     public AppSettingsStore()
     {
@@ -27,24 +31,37 @@ public sealed class AppSettingsStore
         _settingsPath = Path.Combine(settingsDirectory, "settings.json");
     }
 
-    public Task<AppSettings> LoadAsync()
+    public AppSettings CurrentSettings => _currentSettings;
+
+    public async Task<AppSettings> LoadAsync(bool forceReload = false, CancellationToken cancellationToken = default)
     {
-        DiagnosticsLogger.Info($"Loading settings from '{_settingsPath}'.");
-        if (!File.Exists(_settingsPath))
-        {
-            DiagnosticsLogger.Info("Settings file does not exist yet.");
-            return Task.FromResult(new AppSettings());
-        }
+        await _stateLock.WaitAsync(cancellationToken);
 
         try
         {
-            var json = File.ReadAllText(_settingsPath);
+            if (!forceReload && _hasLoadedSettings)
+            {
+                return _currentSettings;
+            }
+
+            DiagnosticsLogger.Info($"Loading settings from '{_settingsPath}'.");
+            if (!File.Exists(_settingsPath))
+            {
+                DiagnosticsLogger.Info("Settings file does not exist yet.");
+                _currentSettings = new AppSettings();
+                _hasLoadedSettings = true;
+                return _currentSettings;
+            }
+
+            var json = await File.ReadAllTextAsync(_settingsPath, cancellationToken);
             var storedSettings = JsonSerializer.Deserialize<StoredSettings>(json, _serializerOptions) ?? new StoredSettings();
 
-            var settings = new AppSettings
+            _currentSettings = new AppSettings
             {
                 SelectedInputDeviceId = storedSettings.SelectedInputDeviceId,
+                Provider = storedSettings.Provider ?? TranscriptionProvider.Groq,
                 GroqApiKey = Decrypt(storedSettings.EncryptedGroqApiKey),
+                FireworksApiKey = Decrypt(storedSettings.EncryptedFireworksApiKey),
                 Hotkey = storedSettings.Hotkey ?? HotkeyBinding.Default,
                 PasteLastTranscriptHotkey = storedSettings.PasteLastTranscriptHotkey ?? HotkeyBinding.PasteLastTranscriptDefault,
                 TranscriptHistoryLimit = storedSettings.TranscriptHistoryLimit is null or < 0 ? 20 : storedSettings.TranscriptHistoryLimit.Value,
@@ -52,12 +69,19 @@ public sealed class AppSettingsStore
                 GroqModel = string.IsNullOrWhiteSpace(storedSettings.GroqModel)
                     ? "whisper-large-v3-turbo"
                     : storedSettings.GroqModel,
+                GroqLanguage = NormalizeLanguage(storedSettings.GroqLanguage),
+                FireworksModel = string.IsNullOrWhiteSpace(storedSettings.FireworksModel)
+                    ? "whisper-v3-turbo"
+                    : storedSettings.FireworksModel,
+                FireworksLanguage = NormalizeLanguage(storedSettings.FireworksLanguage),
+                HasCompletedInitialSetup = storedSettings.HasCompletedInitialSetup ?? false,
             };
 
             DiagnosticsLogger.Info(
-                $"Settings loaded. SelectedInputDeviceId='{settings.SelectedInputDeviceId}', HasGroqApiKey={!string.IsNullOrWhiteSpace(settings.GroqApiKey)}, Hotkey='{settings.Hotkey.ToDisplayString()}', PasteLastTranscriptHotkey='{settings.PasteLastTranscriptHotkey.ToDisplayString()}', TranscriptHistoryLimit={settings.TranscriptHistoryLimit}, PushToTalk={settings.PushToTalk}, GroqModel='{settings.GroqModel}'.");
+                $"Settings loaded. SelectedInputDeviceId='{_currentSettings.SelectedInputDeviceId}', Provider='{_currentSettings.Provider}', HasGroqApiKey={!string.IsNullOrWhiteSpace(_currentSettings.GroqApiKey)}, HasFireworksApiKey={!string.IsNullOrWhiteSpace(_currentSettings.FireworksApiKey)}, Hotkey='{_currentSettings.Hotkey.ToDisplayString()}', PasteLastTranscriptHotkey='{_currentSettings.PasteLastTranscriptHotkey.ToDisplayString()}', TranscriptHistoryLimit={_currentSettings.TranscriptHistoryLimit}, PushToTalk={_currentSettings.PushToTalk}, GroqModel='{_currentSettings.GroqModel}', GroqLanguage='{_currentSettings.GroqLanguage}', FireworksModel='{_currentSettings.FireworksModel}', FireworksLanguage='{_currentSettings.FireworksLanguage}', HasCompletedInitialSetup={_currentSettings.HasCompletedInitialSetup}.");
 
-            return Task.FromResult(settings);
+            _hasLoadedSettings = true;
+            return _currentSettings;
         }
         catch (JsonException exception)
         {
@@ -67,28 +91,73 @@ public sealed class AppSettingsStore
         {
             throw new InvalidOperationException("The saved Groq API key could not be read. Open Settings and save it again.", exception);
         }
+        finally
+        {
+            _stateLock.Release();
+        }
     }
 
-    public Task SaveAsync(AppSettings settings)
+    public async Task SaveAsync(AppSettings settings, CancellationToken cancellationToken = default)
     {
-        DiagnosticsLogger.Info(
-            $"Saving settings. SelectedInputDeviceId='{settings.SelectedInputDeviceId}', HasGroqApiKey={!string.IsNullOrWhiteSpace(settings.GroqApiKey)}, Hotkey='{settings.Hotkey.ToDisplayString()}', PasteLastTranscriptHotkey='{settings.PasteLastTranscriptHotkey.ToDisplayString()}', TranscriptHistoryLimit={settings.TranscriptHistoryLimit}, PushToTalk={settings.PushToTalk}, GroqModel='{settings.GroqModel}'.");
-        var storedSettings = new StoredSettings
+        await _stateLock.WaitAsync(cancellationToken);
+
+        try
         {
-            SelectedInputDeviceId = settings.SelectedInputDeviceId,
-            EncryptedGroqApiKey = Encrypt(settings.GroqApiKey),
-            Hotkey = settings.Hotkey,
-            PasteLastTranscriptHotkey = settings.PasteLastTranscriptHotkey,
-            TranscriptHistoryLimit = settings.TranscriptHistoryLimit,
-            PushToTalk = settings.PushToTalk,
-            GroqModel = settings.GroqModel,
-        };
+            DiagnosticsLogger.Info(
+                $"Saving settings. SelectedInputDeviceId='{settings.SelectedInputDeviceId}', Provider='{settings.Provider}', HasGroqApiKey={!string.IsNullOrWhiteSpace(settings.GroqApiKey)}, HasFireworksApiKey={!string.IsNullOrWhiteSpace(settings.FireworksApiKey)}, Hotkey='{settings.Hotkey.ToDisplayString()}', PasteLastTranscriptHotkey='{settings.PasteLastTranscriptHotkey.ToDisplayString()}', TranscriptHistoryLimit={settings.TranscriptHistoryLimit}, PushToTalk={settings.PushToTalk}, GroqModel='{settings.GroqModel}', GroqLanguage='{settings.GroqLanguage}', FireworksModel='{settings.FireworksModel}', FireworksLanguage='{settings.FireworksLanguage}'.");
+            var storedSettings = new StoredSettings
+            {
+                SelectedInputDeviceId = settings.SelectedInputDeviceId,
+                Provider = settings.Provider,
+                EncryptedGroqApiKey = Encrypt(settings.GroqApiKey),
+                EncryptedFireworksApiKey = Encrypt(settings.FireworksApiKey),
+                Hotkey = settings.Hotkey,
+                PasteLastTranscriptHotkey = settings.PasteLastTranscriptHotkey,
+                TranscriptHistoryLimit = settings.TranscriptHistoryLimit,
+                PushToTalk = settings.PushToTalk,
+                GroqModel = settings.GroqModel,
+                GroqLanguage = NormalizeLanguage(settings.GroqLanguage),
+                FireworksModel = settings.FireworksModel,
+                FireworksLanguage = NormalizeLanguage(settings.FireworksLanguage),
+                HasCompletedInitialSetup = settings.HasCompletedInitialSetup,
+            };
 
-        var json = JsonSerializer.Serialize(storedSettings, _serializerOptions);
-        File.WriteAllText(_settingsPath, json);
-        DiagnosticsLogger.Info($"Settings saved to '{_settingsPath}'.");
+            var json = JsonSerializer.Serialize(storedSettings, _serializerOptions);
+            await File.WriteAllTextAsync(_settingsPath, json, cancellationToken);
+            _currentSettings = new AppSettings
+            {
+                SelectedInputDeviceId = settings.SelectedInputDeviceId,
+                Provider = settings.Provider,
+                GroqApiKey = settings.GroqApiKey,
+                FireworksApiKey = settings.FireworksApiKey,
+                Hotkey = settings.Hotkey,
+                PasteLastTranscriptHotkey = settings.PasteLastTranscriptHotkey,
+                TranscriptHistoryLimit = settings.TranscriptHistoryLimit,
+                PushToTalk = settings.PushToTalk,
+                GroqModel = settings.GroqModel,
+                GroqLanguage = NormalizeLanguage(settings.GroqLanguage),
+                FireworksModel = settings.FireworksModel,
+                FireworksLanguage = NormalizeLanguage(settings.FireworksLanguage),
+                HasCompletedInitialSetup = settings.HasCompletedInitialSetup,
+            };
+            _hasLoadedSettings = true;
+            DiagnosticsLogger.Info($"Settings saved to '{_settingsPath}'.");
+        }
+        finally
+        {
+            _stateLock.Release();
+        }
+    }
 
-        return Task.CompletedTask;
+    private static string NormalizeLanguage(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return "en";
+        }
+
+        var normalized = value.Trim().ToLowerInvariant();
+        return normalized == "auto" ? "auto" : normalized;
     }
 
     private static string? Encrypt(string? value)
@@ -121,6 +190,10 @@ public sealed class AppSettingsStore
 
         public string? EncryptedGroqApiKey { get; set; }
 
+        public string? EncryptedFireworksApiKey { get; set; }
+
+        public TranscriptionProvider? Provider { get; set; }
+
         public HotkeyBinding? Hotkey { get; set; }
 
         public HotkeyBinding? PasteLastTranscriptHotkey { get; set; }
@@ -130,5 +203,13 @@ public sealed class AppSettingsStore
         public bool? PushToTalk { get; set; }
 
         public string? GroqModel { get; set; }
+
+        public string? GroqLanguage { get; set; }
+
+        public string? FireworksModel { get; set; }
+
+        public string? FireworksLanguage { get; set; }
+
+        public bool? HasCompletedInitialSetup { get; set; }
     }
 }

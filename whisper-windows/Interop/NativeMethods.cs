@@ -16,10 +16,15 @@ internal static class NativeMethods
     public const uint WM_KEYUP = 0x0101;
     public const uint WM_SYSKEYDOWN = 0x0104;
     public const uint WM_SYSKEYUP = 0x0105;
+    public const uint WM_PASTE = 0x0302;
+    public const uint WM_USER = 0x0400;
     public const uint WM_LBUTTONUP = 0x0202;
     public const uint WM_LBUTTONDBLCLK = 0x0203;
     public const uint WM_RBUTTONUP = 0x0205;
     public const uint WM_APP = 0x8000;
+
+    public const uint NIN_SELECT = WM_USER;
+    public const uint NIN_KEYSELECT = WM_USER + 1;
 
     public const int SIZE_MINIMIZED = 1;
     public const int SW_HIDE = 0;
@@ -49,11 +54,15 @@ internal static class NativeMethods
     public const uint NIM_ADD = 0x00000000;
     public const uint NIM_MODIFY = 0x00000001;
     public const uint NIM_DELETE = 0x00000002;
+    public const uint NIM_SETFOCUS = 0x00000003;
+    public const uint NIM_SETVERSION = 0x00000004;
 
     public const uint NIF_MESSAGE = 0x00000001;
     public const uint NIF_ICON = 0x00000002;
     public const uint NIF_TIP = 0x00000004;
     public const uint NIF_INFO = 0x00000010;
+
+    public const uint NOTIFYICON_VERSION_4 = 4;
 
     public const uint NIIF_INFO = 0x00000001;
     public const uint NIIF_ERROR = 0x00000003;
@@ -123,7 +132,24 @@ internal static class NativeMethods
     public struct InputUnion
     {
         [FieldOffset(0)]
+        public MOUSEINPUT mi;
+
+        [FieldOffset(0)]
         public KEYBDINPUT ki;
+
+        [FieldOffset(0)]
+        public HARDWAREINPUT hi;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct MOUSEINPUT
+    {
+        public int dx;
+        public int dy;
+        public uint mouseData;
+        public uint dwFlags;
+        public uint time;
+        public IntPtr dwExtraInfo;
     }
 
     [StructLayout(LayoutKind.Sequential)]
@@ -134,6 +160,14 @@ internal static class NativeMethods
         public uint dwFlags;
         public uint time;
         public IntPtr dwExtraInfo;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct HARDWAREINPUT
+    {
+        public uint uMsg;
+        public ushort wParamL;
+        public ushort wParamH;
     }
 
     public delegate IntPtr WndProc(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam);
@@ -234,6 +268,9 @@ internal static class NativeMethods
 
     [DllImport("user32.dll", SetLastError = true)]
     public static extern uint SendInput(uint nInputs, INPUT[] pInputs, int cbSize);
+
+    [DllImport("user32.dll")]
+    public static extern short VkKeyScan(char ch);
 
     [DllImport("user32.dll", SetLastError = true)]
     public static extern void keybd_event(byte bVk, byte bScan, uint dwFlags, UIntPtr dwExtraInfo);

@@ -4,6 +4,7 @@ using Microsoft.UI.Xaml.Controls;
 using whisper_windows.Interop;
 using whisper_windows.Models;
 using whisper_windows.Services;
+using whisper_windows.ViewModels;
 using Windows.Graphics;
 using WinRT.Interop;
 
@@ -11,14 +12,7 @@ namespace whisper_windows;
 
 public sealed partial class MainWindow : Window
 {
-    private static readonly string[] GroqModels =
-    [
-        "whisper-large-v3-turbo",
-        "whisper-large-v3",
-    ];
-
-    private readonly AppSettingsStore _settingsStore;
-    private readonly AudioDeviceService _audioDeviceService;
+    private readonly MainViewModel _viewModel;
     private readonly IntPtr _windowHandle;
     private readonly NativeMethods.WndProc _windowProc;
 
@@ -26,56 +20,43 @@ public sealed partial class MainWindow : Window
     private TrayIconService? _trayIconService;
     private KeyboardHookService? _keyboardHookService;
     private bool _allowClose;
-    private HotkeyBinding _pendingHotkey = HotkeyBinding.Default;
-    private HotkeyBinding _pendingPasteLastTranscriptHotkey = HotkeyBinding.PasteLastTranscriptDefault;
 
-    public MainWindow(AppSettingsStore settingsStore, AudioDeviceService audioDeviceService)
+    public MainWindow(MainViewModel viewModel)
     {
-        DiagnosticsLogger.Info("MainWindow constructor start.");
-        _settingsStore = settingsStore;
-        _audioDeviceService = audioDeviceService;
+        _viewModel = viewModel;
 
         InitializeComponent();
-        DiagnosticsLogger.Info("MainWindow InitializeComponent completed.");
-
-        GroqModelComboBox.ItemsSource = GroqModels;
 
         _windowHandle = WindowNative.GetWindowHandle(this);
-        DiagnosticsLogger.Info($"MainWindow handle acquired: 0x{_windowHandle.ToInt64():X}.");
         _windowProc = HandleWindowMessage;
         _previousWindowProc = NativeMethods.SetWindowLongPtr(_windowHandle, NativeMethods.GWL_WNDPROC, _windowProc);
-        DiagnosticsLogger.Info($"MainWindow subclass installed. Previous proc: 0x{_previousWindowProc.ToInt64():X}.");
 
         ConfigureWindowAppearance();
         Closed += OnClosed;
-        DiagnosticsLogger.Info("MainWindow constructor completed.");
+        _viewModel.SettingsSaved += OnSettingsSaved;
     }
 
     public event Action<AppSettings>? SettingsSaved;
 
     public void AttachTrayIcon(TrayIconService trayIconService)
     {
-        DiagnosticsLogger.Info("AttachTrayIcon entered.");
         _trayIconService = trayIconService;
         _trayIconService.Initialize(_windowHandle);
-        DiagnosticsLogger.Info("AttachTrayIcon completed.");
     }
 
     public void AttachKeyboardHookService(KeyboardHookService keyboardHookService)
     {
         _keyboardHookService = keyboardHookService;
-        DiagnosticsLogger.Info("AttachKeyboardHookService completed.");
     }
 
     public async Task ShowSettingsWindowAsync()
     {
-        DiagnosticsLogger.Info("ShowSettingsWindowAsync entered.");
-        await LoadSettingsIntoFormAsync();
+        await _viewModel.InitializeAsync();
+        ApplyViewModelToControls();
 
         NativeMethods.ShowWindow(_windowHandle, NativeMethods.SW_RESTORE);
         Activate();
         NativeMethods.SetForegroundWindow(_windowHandle);
-        DiagnosticsLogger.Info("ShowSettingsWindowAsync completed.");
     }
 
     public void HideToTray()
@@ -90,129 +71,143 @@ public sealed partial class MainWindow : Window
 
     private void ConfigureWindowAppearance()
     {
-        DiagnosticsLogger.Info("ConfigureWindowAppearance entered.");
         Title = "Whisper Windows Settings";
 
         var windowId = Microsoft.UI.Win32Interop.GetWindowIdFromWindow(_windowHandle);
         var appWindow = AppWindow.GetFromWindowId(windowId);
-        appWindow.Resize(new SizeInt32(520, 560));
+        appWindow.Resize(new SizeInt32(760, 820));
 
         if (appWindow.Presenter is OverlappedPresenter presenter)
         {
-            presenter.IsMaximizable = false;
+            presenter.IsMaximizable = true;
             presenter.IsMinimizable = true;
         }
-
-        DiagnosticsLogger.Info("ConfigureWindowAppearance completed.");
     }
 
-    private async Task LoadSettingsIntoFormAsync()
+    private void ApplyViewModelToControls()
     {
-        DiagnosticsLogger.Info("LoadSettingsIntoFormAsync entered.");
-        try
-        {
-            var settings = await _settingsStore.LoadAsync();
-            var devices = _audioDeviceService.GetInputDevices();
-
-            InputDeviceComboBox.ItemsSource = devices;
-
-            var selectedDeviceId = string.IsNullOrWhiteSpace(settings.SelectedInputDeviceId)
-                ? devices.FirstOrDefault(device => device.IsDefault)?.Id
-                : settings.SelectedInputDeviceId;
-
-            InputDeviceComboBox.SelectedItem = devices.FirstOrDefault(device => device.Id == selectedDeviceId);
-
-            if (InputDeviceComboBox.SelectedItem is null && devices.Count > 0)
-            {
-                InputDeviceComboBox.SelectedIndex = 0;
-            }
-
-            GroqApiKeyBox.Password = settings.GroqApiKey ?? string.Empty;
-            PushToTalkToggle.IsOn = settings.PushToTalk;
-
-            _pendingHotkey = settings.Hotkey;
-            HotkeyCaptureButton.Content = _pendingHotkey.ToDisplayString();
-
-            _pendingPasteLastTranscriptHotkey = settings.PasteLastTranscriptHotkey;
-            PasteLastTranscriptHotkeyCaptureButton.Content = _pendingPasteLastTranscriptHotkey.ToDisplayString();
-            TranscriptHistoryLimitNumberBox.Value = settings.TranscriptHistoryLimit;
-
-            GroqModelComboBox.SelectedItem = GroqModels.FirstOrDefault(model => model == settings.GroqModel) ?? GroqModels[0];
-
-            StatusTextBlock.Text = devices.Count == 0 ? "No input devices are currently available." : string.Empty;
-            DiagnosticsLogger.Info($"LoadSettingsIntoFormAsync completed. Device count: {devices.Count}.");
-        }
-        catch (Exception exception)
-        {
-            DiagnosticsLogger.Error("LoadSettingsIntoFormAsync failed.", exception);
-            await ShowDialogAsync("Settings could not be loaded", exception.Message);
-        }
-    }
-
-    private void HotkeyCaptureButton_Click(object sender, RoutedEventArgs e)
-    {
-        StartHotkeyCapture(
-            HotkeyCaptureButton,
-            hotkey =>
-            {
-                _pendingHotkey = hotkey;
-                StatusTextBlock.Text = $"Recording hotkey set to {hotkey.ToDisplayString()}. Click Save to apply.";
-            });
-    }
-
-    private void PasteLastTranscriptHotkeyCaptureButton_Click(object sender, RoutedEventArgs e)
-    {
-        StartHotkeyCapture(
-            PasteLastTranscriptHotkeyCaptureButton,
-            hotkey =>
-            {
-                _pendingPasteLastTranscriptHotkey = hotkey;
-                StatusTextBlock.Text = $"Paste last transcript hotkey set to {hotkey.ToDisplayString()}. Click Save to apply.";
-            });
+        InputDeviceComboBox.ItemsSource = _viewModel.InputDevices;
+        InputDeviceComboBox.SelectedItem = _viewModel.SelectedInputDevice;
+        GroqProviderRadioButton.IsChecked = _viewModel.IsGroqSelected;
+        FireworksProviderRadioButton.IsChecked = _viewModel.IsFireworksSelected;
+        HotkeyCaptureButton.Content = _viewModel.RecordingHotkeyDisplay;
+        PasteLastTranscriptHotkeyCaptureButton.Content = _viewModel.PasteLastTranscriptHotkeyDisplay;
+        TranscriptHistoryLimitNumberBox.Value = _viewModel.TranscriptHistoryLimitValue;
+        PushToTalkToggle.IsOn = _viewModel.PushToTalk;
+        GroqApiKeyBox.Password = _viewModel.GroqApiKey;
+        GroqModelComboBox.ItemsSource = _viewModel.AvailableGroqModels;
+        GroqModelComboBox.SelectedItem = _viewModel.SelectedGroqModel;
+        GroqLanguageTextBox.Text = _viewModel.GroqLanguage;
+        FireworksApiKeyBox.Password = _viewModel.FireworksApiKey;
+        FireworksModelComboBox.ItemsSource = _viewModel.AvailableFireworksModels;
+        FireworksModelComboBox.SelectedItem = _viewModel.SelectedFireworksModel;
+        FireworksLanguageTextBox.Text = _viewModel.FireworksLanguage;
+        GroqSettingsPanel.Visibility = _viewModel.GroqSettingsVisibility;
+        FireworksSettingsPanel.Visibility = _viewModel.FireworksSettingsVisibility;
+        StatusTextBlock.Text = _viewModel.StatusMessage;
+        HotkeyWarningTextBlock.Text = _viewModel.HotkeyWarningMessage;
+        HotkeyWarningTextBlock.Visibility = _viewModel.HotkeyWarningVisibility;
+        CancelTranscriptionButton.Visibility = _viewModel.CancelTranscriptionVisibility;
+        TranscriptHistoryRepeater.ItemsSource = _viewModel.TranscriptHistoryEntries;
+        HistoryEmptyTextBlock.Visibility = _viewModel.HistoryEmptyVisibility;
     }
 
     private async void SaveButton_Click(object sender, RoutedEventArgs e)
     {
         SaveButton.IsEnabled = false;
-        StatusTextBlock.Text = string.Empty;
 
         try
         {
-            if (_pendingHotkey.Equals(_pendingPasteLastTranscriptHotkey))
-            {
-                StatusTextBlock.Text = "Recording and paste last transcript hotkeys must be different.";
-                return;
-            }
+            _viewModel.SelectedInputDevice = InputDeviceComboBox.SelectedItem as AudioInputDevice;
+            _viewModel.SelectedProvider = FireworksProviderRadioButton.IsChecked == true
+                ? TranscriptionProvider.Fireworks
+                : TranscriptionProvider.Groq;
+            _viewModel.GroqApiKey = GroqApiKeyBox.Password;
+            _viewModel.FireworksApiKey = FireworksApiKeyBox.Password;
+            _viewModel.PushToTalk = PushToTalkToggle.IsOn;
+            _viewModel.TranscriptHistoryLimitValue = TranscriptHistoryLimitNumberBox.Value;
+            _viewModel.SelectedGroqModel = GroqModelComboBox.SelectedItem as string ?? _viewModel.AvailableGroqModels[0];
+            _viewModel.GroqLanguage = GroqLanguageTextBox.Text;
+            _viewModel.SelectedFireworksModel = FireworksModelComboBox.SelectedItem as string ?? _viewModel.AvailableFireworksModels[0];
+            _viewModel.FireworksLanguage = FireworksLanguageTextBox.Text;
 
-            var selectedDevice = InputDeviceComboBox.SelectedItem as AudioInputDevice;
-            var selectedModel = GroqModelComboBox.SelectedItem as string ?? GroqModels[0];
-            var transcriptHistoryLimit = GetTranscriptHistoryLimit();
-
-            var settings = new AppSettings
-            {
-                SelectedInputDeviceId = selectedDevice?.Id,
-                GroqApiKey = GroqApiKeyBox.Password,
-                Hotkey = _pendingHotkey,
-                PasteLastTranscriptHotkey = _pendingPasteLastTranscriptHotkey,
-                TranscriptHistoryLimit = transcriptHistoryLimit,
-                PushToTalk = PushToTalkToggle.IsOn,
-                GroqModel = selectedModel,
-            };
-
-            await _settingsStore.SaveAsync(settings);
-            SettingsSaved?.Invoke(settings);
-
-            StatusTextBlock.Text = "Settings saved.";
-            DiagnosticsLogger.Info("Settings saved successfully.");
+            await _viewModel.SaveSettingsAsync();
+            ApplyViewModelToControls();
         }
         catch (Exception exception)
         {
-            DiagnosticsLogger.Error("SaveButton_Click failed.", exception);
             await ShowDialogAsync("Settings could not be saved", exception.Message);
         }
         finally
         {
             SaveButton.IsEnabled = true;
+        }
+    }
+
+    private void HotkeyCaptureButton_Click(object sender, RoutedEventArgs e)
+    {
+        StartHotkeyCapture(HotkeyCaptureButton, _viewModel.ApplyRecordingHotkey);
+    }
+
+    private void PasteLastTranscriptHotkeyCaptureButton_Click(object sender, RoutedEventArgs e)
+    {
+        StartHotkeyCapture(PasteLastTranscriptHotkeyCaptureButton, _viewModel.ApplyPasteLastTranscriptHotkey);
+    }
+
+    private async void RefreshDevicesButton_Click(object sender, RoutedEventArgs e)
+    {
+        await _viewModel.ReloadDevicesAsync();
+        ApplyViewModelToControls();
+    }
+
+    private void ProviderRadioButton_Checked(object sender, RoutedEventArgs e)
+    {
+        _viewModel.SelectedProvider = FireworksProviderRadioButton.IsChecked == true
+            ? TranscriptionProvider.Fireworks
+            : TranscriptionProvider.Groq;
+        ApplyViewModelToControls();
+    }
+
+    private async void CancelTranscriptionButton_Click(object sender, RoutedEventArgs e)
+    {
+        await _viewModel.CancelTranscriptionAsync();
+        ApplyViewModelToControls();
+    }
+
+    private async void CopyHistoryItemButton_Click(object sender, RoutedEventArgs e)
+    {
+        if ((sender as FrameworkElement)?.DataContext is TranscriptHistoryItemViewModel item)
+        {
+            await _viewModel.CopyHistoryEntryAsync(item);
+            ApplyViewModelToControls();
+        }
+    }
+
+    private async void DeleteHistoryItemButton_Click(object sender, RoutedEventArgs e)
+    {
+        if ((sender as FrameworkElement)?.DataContext is TranscriptHistoryItemViewModel item)
+        {
+            await _viewModel.DeleteHistoryEntryAsync(item);
+            ApplyViewModelToControls();
+        }
+    }
+
+    private async void ClearHistoryButton_Click(object sender, RoutedEventArgs e)
+    {
+        var dialog = new ContentDialog
+        {
+            Title = "Clear transcript history?",
+            Content = "This removes all saved transcripts from local history.",
+            PrimaryButtonText = "Clear",
+            CloseButtonText = "Cancel",
+            XamlRoot = RootGrid.XamlRoot,
+        };
+
+        var result = await dialog.ShowAsync();
+        if (result == ContentDialogResult.Primary)
+        {
+            await _viewModel.ClearHistoryAsync();
+            ApplyViewModelToControls();
         }
     }
 
@@ -235,6 +230,7 @@ public sealed partial class MainWindow : Window
         onHotkeyCaptured(hotkey);
         button.Content = hotkey.ToDisplayString();
         SetHotkeyCaptureButtonsEnabled(true);
+        ApplyViewModelToControls();
     }
 
     private void SetHotkeyCaptureButtonsEnabled(bool isEnabled)
@@ -243,21 +239,8 @@ public sealed partial class MainWindow : Window
         PasteLastTranscriptHotkeyCaptureButton.IsEnabled = isEnabled;
     }
 
-    private int GetTranscriptHistoryLimit()
-    {
-        var value = TranscriptHistoryLimitNumberBox.Value;
-
-        if (double.IsNaN(value) || double.IsInfinity(value))
-        {
-            return 20;
-        }
-
-        return Math.Clamp((int)Math.Round(value), 0, 500);
-    }
-
     private async Task ShowDialogAsync(string title, string message)
     {
-        DiagnosticsLogger.Info($"ShowDialogAsync: {title}");
         var dialog = new ContentDialog
         {
             Title = title,
@@ -303,12 +286,17 @@ public sealed partial class MainWindow : Window
 
     private void OnClosed(object sender, WindowEventArgs args)
     {
-        DiagnosticsLogger.Info("MainWindow OnClosed entered.");
         if (_previousWindowProc != IntPtr.Zero)
         {
             NativeMethods.SetWindowLongPtr(_windowHandle, NativeMethods.GWL_WNDPROC, _previousWindowProc);
             _previousWindowProc = IntPtr.Zero;
         }
-        DiagnosticsLogger.Info("MainWindow OnClosed completed.");
+
+        _viewModel.Dispose();
+    }
+
+    private void OnSettingsSaved(AppSettings settings)
+    {
+        SettingsSaved?.Invoke(settings);
     }
 }

@@ -1,0 +1,171 @@
+using whisper_windows.Interfaces;
+using whisper_windows.Models;
+using whisper_windows.ViewModels;
+
+namespace whisper_windows.Services;
+
+public sealed class AppCoordinator
+{
+    private readonly MainWindow _mainWindow;
+    private readonly MainViewModel _mainViewModel;
+    private readonly IUiDispatcherQueueAccessor _uiDispatcherQueueAccessor;
+    private readonly IAppSettingsStore _settingsStore;
+    private readonly ITranscriptHistoryStore _transcriptHistoryStore;
+    private readonly INotificationService _notificationService;
+    private readonly IDictationController _dictationController;
+
+    private KeyboardHookService? _keyboardHookService;
+    private TrayIconService? _trayIconService;
+    private bool _isQuitting;
+    private bool _toggleRecordingActive;
+    private AppSettings _currentSettings = new();
+
+    public AppCoordinator(
+        MainWindow mainWindow,
+        MainViewModel mainViewModel,
+        IUiDispatcherQueueAccessor uiDispatcherQueueAccessor,
+        IAppSettingsStore settingsStore,
+        ITranscriptHistoryStore transcriptHistoryStore,
+        INotificationService notificationService,
+        IDictationController dictationController)
+    {
+        _mainWindow = mainWindow;
+        _mainViewModel = mainViewModel;
+        _uiDispatcherQueueAccessor = uiDispatcherQueueAccessor;
+        _settingsStore = settingsStore;
+        _transcriptHistoryStore = transcriptHistoryStore;
+        _notificationService = notificationService;
+        _dictationController = dictationController;
+        Current = this;
+    }
+
+    public static AppCoordinator? Current { get; private set; }
+
+    public async Task InitializeAsync()
+    {
+        _uiDispatcherQueueAccessor.DispatcherQueue = _mainWindow.DispatcherQueue;
+        _currentSettings = await _settingsStore.LoadAsync();
+        await _transcriptHistoryStore.EnforceRetentionAsync(_currentSettings.TranscriptHistoryLimit);
+
+        _mainWindow.SettingsSaved += OnSettingsSaved;
+        _mainWindow.Activate();
+
+        _trayIconService = new TrayIconService(() => _mainWindow.ShowSettingsWindowAsync(), QuitApplication);
+        _mainWindow.AttachTrayIcon(_trayIconService);
+        _notificationService.AttachTrayIconService(_trayIconService);
+
+        _keyboardHookService = new KeyboardHookService(_mainWindow.DispatcherQueue);
+        _keyboardHookService.UpdateHotkeys(_currentSettings.Hotkey, _currentSettings.PasteLastTranscriptHotkey);
+        _keyboardHookService.RecordingHotkeyStarted += OnRecordingHotkeyStarted;
+        _keyboardHookService.RecordingHotkeyEnded += OnRecordingHotkeyEnded;
+        _keyboardHookService.PasteLastTranscriptHotkeyPressed += OnPasteLastTranscriptHotkeyPressed;
+        _mainWindow.AttachKeyboardHookService(_keyboardHookService);
+
+        await _mainViewModel.InitializeAsync();
+
+        try
+        {
+            _keyboardHookService.Start();
+        }
+        catch (Exception exception)
+        {
+            DiagnosticsLogger.Error("Keyboard hook startup failed.", exception);
+            _notificationService.ShowNotification("Startup failed", exception.Message, true);
+            await _mainWindow.ShowSettingsWindowAsync();
+            return;
+        }
+
+        if (ShouldShowSettingsOnLaunch(_currentSettings))
+        {
+            await _mainWindow.ShowSettingsWindowAsync();
+        }
+        else
+        {
+            _mainWindow.HideToTray();
+        }
+    }
+
+    public void ShowMainWindowFromActivation()
+    {
+        _ = _mainWindow.ShowSettingsWindowAsync();
+    }
+
+    private async void OnRecordingHotkeyStarted(object? sender, EventArgs e)
+    {
+        if (_currentSettings.PushToTalk)
+        {
+            await _dictationController.StartDictationAsync();
+            return;
+        }
+
+        if (_toggleRecordingActive)
+        {
+            await _dictationController.StopDictationAsync();
+            _toggleRecordingActive = false;
+        }
+        else if (await _dictationController.StartDictationAsync())
+        {
+            _toggleRecordingActive = true;
+        }
+    }
+
+    private async void OnRecordingHotkeyEnded(object? sender, EventArgs e)
+    {
+        if (!_currentSettings.PushToTalk)
+        {
+            return;
+        }
+
+        await _dictationController.StopDictationAsync();
+    }
+
+    private async void OnPasteLastTranscriptHotkeyPressed(object? sender, EventArgs e)
+    {
+        await _dictationController.PasteLastTranscriptAsync(_currentSettings.PasteLastTranscriptHotkey);
+    }
+
+    private async void OnSettingsSaved(AppSettings settings)
+    {
+        _currentSettings = settings;
+        _keyboardHookService?.UpdateHotkeys(settings.Hotkey, settings.PasteLastTranscriptHotkey);
+
+        try
+        {
+            await _transcriptHistoryStore.EnforceRetentionAsync(settings.TranscriptHistoryLimit);
+        }
+        catch (Exception exception)
+        {
+            DiagnosticsLogger.Error("Transcript history retention could not be applied.", exception);
+        }
+    }
+
+    private void QuitApplication()
+    {
+        if (_isQuitting)
+        {
+            return;
+        }
+
+        _isQuitting = true;
+
+        if (_keyboardHookService is not null)
+        {
+            _keyboardHookService.RecordingHotkeyStarted -= OnRecordingHotkeyStarted;
+            _keyboardHookService.RecordingHotkeyEnded -= OnRecordingHotkeyEnded;
+            _keyboardHookService.PasteLastTranscriptHotkeyPressed -= OnPasteLastTranscriptHotkeyPressed;
+            _keyboardHookService.Dispose();
+            _keyboardHookService = null;
+        }
+
+        _mainWindow.SettingsSaved -= OnSettingsSaved;
+        _dictationController.Dispose();
+        _trayIconService?.Dispose();
+        _mainWindow.EnableClose();
+        _mainWindow.Close();
+    }
+
+    private static bool ShouldShowSettingsOnLaunch(AppSettings settings)
+    {
+        return !settings.HasCompletedInitialSetup || string.IsNullOrWhiteSpace(settings.GroqApiKey);
+    }
+}

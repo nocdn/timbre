@@ -44,6 +44,9 @@ public sealed class TrayIconService : IDisposable
             throw new Win32Exception(Marshal.GetLastWin32Error(), "Failed to create the tray icon.");
         }
 
+        trayData.uTimeoutOrVersion = NativeMethods.NOTIFYICON_VERSION_4;
+        NativeMethods.Shell_NotifyIcon(NativeMethods.NIM_SETVERSION, ref trayData);
+
         _initialized = true;
         DiagnosticsLogger.Info("TrayIconService.Initialize completed.");
     }
@@ -55,15 +58,16 @@ public sealed class TrayIconService : IDisposable
             return false;
         }
 
-        var trayMessage = unchecked((uint)lParam.ToInt64());
+        var trayMessage = unchecked((uint)(lParam.ToInt64() & 0xFFFF));
 
-        if (trayMessage == NativeMethods.WM_RBUTTONUP || trayMessage == NativeMethods.WM_CONTEXTMENU)
+        if (trayMessage == NativeMethods.WM_CONTEXTMENU || trayMessage == NativeMethods.WM_RBUTTONUP)
         {
             ShowContextMenu();
             return true;
         }
 
-        if (trayMessage == NativeMethods.WM_LBUTTONUP || trayMessage == NativeMethods.WM_LBUTTONDBLCLK)
+        if (trayMessage == NativeMethods.NIN_SELECT || trayMessage == NativeMethods.NIN_KEYSELECT ||
+            trayMessage == NativeMethods.WM_LBUTTONUP || trayMessage == NativeMethods.WM_LBUTTONDBLCLK)
         {
             _ = _openSettingsAsync();
             return true;
@@ -150,6 +154,8 @@ public sealed class TrayIconService : IDisposable
                 IntPtr.Zero);
 
             NativeMethods.PostMessage(_windowHandle, NativeMethods.WM_NULL, IntPtr.Zero, IntPtr.Zero);
+            var trayData = CreateNotifyIconData(0);
+            NativeMethods.Shell_NotifyIcon(NativeMethods.NIM_SETFOCUS, ref trayData);
 
             if (selectedCommand == SettingsCommandId)
             {

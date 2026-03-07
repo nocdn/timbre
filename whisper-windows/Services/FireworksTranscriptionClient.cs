@@ -6,13 +6,14 @@ using whisper_windows.Models;
 
 namespace whisper_windows.Services;
 
-public sealed class GroqTranscriptionClient : ITranscriptionClient
+public sealed class FireworksTranscriptionClient : ITranscriptionClient
 {
-    private static readonly Uri Endpoint = new("https://api.groq.com/openai/v1/audio/transcriptions");
+    private static readonly Uri ProdEndpoint = new("https://audio-prod.api.fireworks.ai/v1/audio/transcriptions");
+    private static readonly Uri TurboEndpoint = new("https://audio-turbo.api.fireworks.ai/v1/audio/transcriptions");
 
     private readonly HttpClient _httpClient;
 
-    public GroqTranscriptionClient(HttpClient httpClient)
+    public FireworksTranscriptionClient(HttpClient httpClient)
     {
         _httpClient = httpClient;
     }
@@ -26,13 +27,11 @@ public sealed class GroqTranscriptionClient : ITranscriptionClient
 
         if (string.IsNullOrWhiteSpace(apiKey))
         {
-            throw new TranscriptionException("The Groq API key is missing.", false);
+            throw new TranscriptionException("The Fireworks API key is missing.", false);
         }
 
-        if (string.IsNullOrWhiteSpace(model))
-        {
-            throw new TranscriptionException("The Groq model is missing.", false);
-        }
+        var normalizedModel = string.IsNullOrWhiteSpace(model) ? "whisper-v3-turbo" : model.Trim();
+        var endpoint = normalizedModel == "whisper-v3" ? ProdEndpoint : TurboEndpoint;
 
         try
         {
@@ -41,7 +40,7 @@ public sealed class GroqTranscriptionClient : ITranscriptionClient
 
             audioContent.Headers.ContentType = MediaTypeHeaderValue.Parse("audio/wav");
             form.Add(audioContent, "file", "recording.wav");
-            form.Add(new StringContent(model), "model");
+            form.Add(new StringContent(normalizedModel), "model");
             form.Add(new StringContent("json"), "response_format");
 
             var normalizedLanguage = NormalizeLanguage(language);
@@ -50,20 +49,20 @@ public sealed class GroqTranscriptionClient : ITranscriptionClient
                 form.Add(new StringContent(normalizedLanguage), "language");
             }
 
-            using var request = new HttpRequestMessage(HttpMethod.Post, Endpoint)
+            using var request = new HttpRequestMessage(HttpMethod.Post, endpoint)
             {
                 Content = form,
             };
 
-            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", apiKey.Trim());
+            request.Headers.Add("Authorization", apiKey.Trim());
 
             DiagnosticsLogger.Info(
-                $"Groq request starting. Endpoint={Endpoint}, Model={model}, ResponseFormat=json, AudioBytes={audioBytes.Length}, Language='{normalizedLanguage ?? "auto"}'.");
+                $"Fireworks request starting. Endpoint={endpoint}, Model={normalizedModel}, ResponseFormat=json, AudioBytes={audioBytes.Length}, Language='{normalizedLanguage ?? "auto"}'.");
 
             using var response = await _httpClient.SendAsync(request, cancellationToken);
             var responseBody = await response.Content.ReadAsStringAsync(cancellationToken);
             DiagnosticsLogger.Info(
-                $"Groq response received. Status={(int)response.StatusCode} {response.StatusCode}, BodyLength={responseBody.Length}.");
+                $"Fireworks response received. Status={(int)response.StatusCode} {response.StatusCode}, BodyLength={responseBody.Length}.");
 
             if (!response.IsSuccessStatusCode)
             {
@@ -80,7 +79,7 @@ public sealed class GroqTranscriptionClient : ITranscriptionClient
 
             if (string.IsNullOrWhiteSpace(transcription?.Text))
             {
-                throw new TranscriptionException("Groq returned an empty transcription.", false);
+                throw new TranscriptionException("Fireworks returned an empty transcription.", false);
             }
 
             return transcription.Text.Trim();
@@ -91,7 +90,7 @@ public sealed class GroqTranscriptionClient : ITranscriptionClient
         }
         catch (HttpRequestException exception)
         {
-            throw new TranscriptionException("The transcription request could not reach Groq.", true, null, exception);
+            throw new TranscriptionException("The transcription request could not reach Fireworks.", true, null, exception);
         }
     }
 
@@ -103,12 +102,7 @@ public sealed class GroqTranscriptionClient : ITranscriptionClient
         }
 
         var normalized = value.Trim().ToLowerInvariant();
-        if (normalized == "auto")
-        {
-            return null;
-        }
-
-        return normalized;
+        return normalized == "auto" ? null : normalized;
     }
 
     private static string ExtractErrorMessage(string responseBody, int statusCode)
@@ -117,12 +111,19 @@ public sealed class GroqTranscriptionClient : ITranscriptionClient
         {
             using var document = JsonDocument.Parse(responseBody);
 
-            if (document.RootElement.TryGetProperty("error", out var errorElement) &&
-                errorElement.TryGetProperty("message", out var nestedMessage) &&
-                nestedMessage.ValueKind == JsonValueKind.String &&
-                !string.IsNullOrWhiteSpace(nestedMessage.GetString()))
+            if (document.RootElement.TryGetProperty("error", out var errorElement))
             {
-                return nestedMessage.GetString()!;
+                if (errorElement.ValueKind == JsonValueKind.String && !string.IsNullOrWhiteSpace(errorElement.GetString()))
+                {
+                    return errorElement.GetString()!;
+                }
+
+                if (errorElement.TryGetProperty("message", out var nestedMessage) &&
+                    nestedMessage.ValueKind == JsonValueKind.String &&
+                    !string.IsNullOrWhiteSpace(nestedMessage.GetString()))
+                {
+                    return nestedMessage.GetString()!;
+                }
             }
 
             if (document.RootElement.TryGetProperty("message", out var messageElement) &&
@@ -136,7 +137,7 @@ public sealed class GroqTranscriptionClient : ITranscriptionClient
         {
         }
 
-        return $"Groq returned HTTP {statusCode}.";
+        return $"Fireworks returned HTTP {statusCode}.";
     }
 
     private static bool IsTransientStatusCode(HttpStatusCode statusCode)

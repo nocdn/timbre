@@ -1,9 +1,10 @@
 using NAudio.CoreAudioApi;
+using whisper_windows.Interfaces;
 using whisper_windows.Models;
 
 namespace whisper_windows.Services;
 
-public sealed class AudioDeviceService
+public sealed class AudioDeviceService : IAudioDeviceService
 {
     public IReadOnlyList<AudioInputDevice> GetInputDevices()
     {

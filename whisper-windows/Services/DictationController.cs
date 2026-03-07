@@ -1,77 +1,67 @@
-using System.Threading;
+using whisper_windows.Interfaces;
 using whisper_windows.Models;
 
 namespace whisper_windows.Services;
 
-public sealed class DictationController : IDisposable
+public sealed class DictationController : IDictationController
 {
     private const int GroqUploadLimitBytes = 25 * 1024 * 1024;
+    private const int MaxRetryCount = 2;
 
-    private readonly AppSettingsStore _settingsStore;
-    private readonly AudioDeviceService _audioDeviceService;
-    private readonly GroqTranscriptionClient _transcriptionClient;
-    private readonly ClipboardPasteService _clipboardPasteService;
-    private readonly TranscriptHistoryStore _transcriptHistoryStore;
-    private readonly TrayIconService _trayIconService;
+    private readonly IAppSettingsStore _settingsStore;
+    private readonly IAudioDeviceService _audioDeviceService;
+    private readonly ITranscriptionClientFactory _transcriptionClientFactory;
+    private readonly IClipboardPasteService _clipboardPasteService;
+    private readonly ITranscriptHistoryStore _transcriptHistoryStore;
+    private readonly INotificationService _notificationService;
     private readonly SemaphoreSlim _stateLock = new(1, 1);
 
     private AudioRecorder? _activeRecorder;
+    private CancellationTokenSource? _transcriptionCancellationTokenSource;
     private bool _isTranscribing;
     private string? _lastTranscript;
 
     public DictationController(
-        AppSettingsStore settingsStore,
-        AudioDeviceService audioDeviceService,
-        GroqTranscriptionClient transcriptionClient,
-        ClipboardPasteService clipboardPasteService,
-        TranscriptHistoryStore transcriptHistoryStore,
-        TrayIconService trayIconService)
+        IAppSettingsStore settingsStore,
+        IAudioDeviceService audioDeviceService,
+        ITranscriptionClientFactory transcriptionClientFactory,
+        IClipboardPasteService clipboardPasteService,
+        ITranscriptHistoryStore transcriptHistoryStore,
+        INotificationService notificationService)
     {
         _settingsStore = settingsStore;
         _audioDeviceService = audioDeviceService;
-        _transcriptionClient = transcriptionClient;
+        _transcriptionClientFactory = transcriptionClientFactory;
         _clipboardPasteService = clipboardPasteService;
         _transcriptHistoryStore = transcriptHistoryStore;
-        _trayIconService = trayIconService;
+        _notificationService = notificationService;
     }
+
+    public event EventHandler<DictationStatusChangedEventArgs>? StatusChanged;
 
     public async Task<bool> StartDictationAsync()
     {
-        DiagnosticsLogger.Info("StartDictationAsync entered.");
         await _stateLock.WaitAsync();
 
         try
         {
             if (_activeRecorder is not null)
             {
-                DiagnosticsLogger.Info("StartDictationAsync ignored because a recording is already active.");
                 return false;
             }
 
             if (_isTranscribing)
             {
-                DiagnosticsLogger.Info("StartDictationAsync ignored because transcription is already in progress.");
-                _trayIconService.ShowNotification("Transcription in progress", "Wait for the previous dictation to finish before recording again.", true);
+                PublishStatus(DictationState.Transcribing, "Transcription in progress. Wait for the previous dictation to finish.", true);
+                _notificationService.ShowNotification("Transcription in progress", "Wait for the previous dictation to finish before recording again.", true);
                 return false;
             }
 
-            AppSettings settings;
-
-            try
+            var settings = _settingsStore.CurrentSettings;
+            if (!HasProviderApiKey(settings))
             {
-                settings = await _settingsStore.LoadAsync();
-                DiagnosticsLogger.Info("Settings loaded successfully for dictation start.");
-            }
-            catch (Exception exception)
-            {
-                DiagnosticsLogger.Error("Settings load failed during StartDictationAsync.", exception);
-                _trayIconService.ShowNotification("Settings load failed", exception.Message, true);
-                return false;
-            }
-
-            if (string.IsNullOrWhiteSpace(settings.GroqApiKey))
-            {
-                _trayIconService.ShowNotification("Groq API key missing", "Open Settings and save a Groq API key before dictating.", true);
+                PublishStatus(DictationState.Error, GetMissingApiKeyMessage(settings.Provider), false);
+                _notificationService.ShowNotification("API key missing", GetMissingApiKeyMessage(settings.Provider), true);
                 return false;
             }
 
@@ -82,15 +72,14 @@ public sealed class DictationController : IDisposable
                 var device = _audioDeviceService.OpenPreferredCaptureDevice(settings.SelectedInputDeviceId);
                 recorder.Start(device);
                 _activeRecorder = recorder;
-                DiagnosticsLogger.Info(
-                    $"Recording started. Device='{recorder.DeviceName}', Format='{recorder.WaveFormatDescription}'.");
+                PublishStatus(DictationState.Recording, "Recording... release or press the hotkey again to stop.", false);
                 return true;
             }
             catch (Exception exception)
             {
-                DiagnosticsLogger.Error("Recording failed to start.", exception);
                 recorder.Dispose();
-                _trayIconService.ShowNotification("Microphone unavailable", exception.Message, true);
+                PublishStatus(DictationState.Error, exception.Message, false);
+                _notificationService.ShowNotification("Microphone unavailable", exception.Message, true);
                 return false;
             }
         }
@@ -102,7 +91,6 @@ public sealed class DictationController : IDisposable
 
     public async Task<bool> StopDictationAsync()
     {
-        DiagnosticsLogger.Info("StopDictationAsync entered.");
         AudioRecorder? recorder;
 
         await _stateLock.WaitAsync();
@@ -113,12 +101,13 @@ public sealed class DictationController : IDisposable
 
             if (recorder is null)
             {
-                DiagnosticsLogger.Info("StopDictationAsync ignored because no recording is active.");
                 return false;
             }
 
             _activeRecorder = null;
             _isTranscribing = true;
+            _transcriptionCancellationTokenSource = new CancellationTokenSource();
+            PublishStatus(DictationState.Transcribing, "Transcribing...", true);
         }
         finally
         {
@@ -132,45 +121,33 @@ public sealed class DictationController : IDisposable
             try
             {
                 audioBytes = await recorder.StopAsync();
-                DiagnosticsLogger.Info(
-                    $"Recording stopped. CapturedBytes={recorder.LastCompletedBytesCaptured}, PayloadBytes={audioBytes.Length}, Device='{recorder.LastCompletedDeviceName}', Format='{recorder.LastCompletedWaveFormatDescription}'.");
             }
             catch (Exception exception)
             {
-                DiagnosticsLogger.Error("Recording stop failed.", exception);
-                _trayIconService.ShowNotification("Recording failed", exception.Message, true);
+                PublishStatus(DictationState.Error, exception.Message, false);
+                _notificationService.ShowNotification("Recording failed", exception.Message, true);
                 return true;
             }
 
             if (audioBytes.Length == 0)
             {
-                _trayIconService.ShowNotification("Recording failed", "No audio was captured.", true);
+                PublishStatus(DictationState.Error, "No audio was captured.", false);
+                _notificationService.ShowNotification("Recording failed", "No audio was captured.", true);
                 return true;
             }
 
             if (audioBytes.Length > GroqUploadLimitBytes)
             {
-                _trayIconService.ShowNotification("Recording too large", "The recording exceeded Groq's 25 MB speech-to-text limit.", true);
+                PublishStatus(DictationState.Error, "The recording exceeded Groq's upload limit.", false);
+                _notificationService.ShowNotification("Recording too large", "The recording exceeded Groq's speech-to-text upload limit.", true);
                 return true;
             }
 
-            AppSettings settings;
-
-            try
+            var settings = _settingsStore.CurrentSettings;
+            if (!HasProviderApiKey(settings))
             {
-                settings = await _settingsStore.LoadAsync();
-                DiagnosticsLogger.Info("Settings loaded successfully for transcription.");
-            }
-            catch (Exception exception)
-            {
-                DiagnosticsLogger.Error("Settings load failed during StopDictationAsync.", exception);
-                _trayIconService.ShowNotification("Settings load failed", exception.Message, true);
-                return true;
-            }
-
-            if (string.IsNullOrWhiteSpace(settings.GroqApiKey))
-            {
-                _trayIconService.ShowNotification("Groq API key missing", "Open Settings and save a Groq API key before dictating.", true);
+                PublishStatus(DictationState.Error, GetMissingApiKeyMessage(settings.Provider), false);
+                _notificationService.ShowNotification("API key missing", GetMissingApiKeyMessage(settings.Provider), true);
                 return true;
             }
 
@@ -178,13 +155,17 @@ public sealed class DictationController : IDisposable
 
             try
             {
-                transcription = await _transcriptionClient.TranscribeAsync(audioBytes, settings.GroqApiKey, settings.GroqModel);
-                DiagnosticsLogger.Info($"Transcription completed. TextLength={transcription.Length}.");
+                transcription = await TranscribeWithRetryAsync(audioBytes, settings, _transcriptionCancellationTokenSource.Token);
+            }
+            catch (OperationCanceledException)
+            {
+                PublishStatus(DictationState.Idle, "Transcription cancelled.", false);
+                return true;
             }
             catch (Exception exception)
             {
-                DiagnosticsLogger.Error("Transcription request failed.", exception);
-                _trayIconService.ShowNotification("Transcription failed", exception.Message, true);
+                PublishStatus(DictationState.Error, exception.Message, false);
+                _notificationService.ShowNotification("Transcription failed", exception.Message, true);
                 return true;
             }
 
@@ -205,21 +186,21 @@ public sealed class DictationController : IDisposable
             }
             catch (Exception exception)
             {
-                DiagnosticsLogger.Error("Transcript history could not be updated.", exception);
-                _trayIconService.ShowNotification("Transcript history failed", exception.Message, true);
+                _notificationService.ShowNotification("Transcript history failed", exception.Message, true);
             }
 
             try
             {
                 await _clipboardPasteService.PasteTextAsync(transcription);
-                DiagnosticsLogger.Info("PasteTextAsync completed successfully.");
             }
             catch (Exception exception)
             {
-                DiagnosticsLogger.Error("PasteTextAsync failed after transcription.", exception);
-                _trayIconService.ShowNotification("Paste failed", exception.Message, true);
+                PublishStatus(DictationState.Error, exception.Message, false);
+                _notificationService.ShowNotification("Paste failed", exception.Message, true);
+                return true;
             }
 
+            PublishStatus(DictationState.Idle, "Transcript pasted successfully.", false);
             return true;
         }
         finally
@@ -230,6 +211,8 @@ public sealed class DictationController : IDisposable
 
             try
             {
+                _transcriptionCancellationTokenSource?.Dispose();
+                _transcriptionCancellationTokenSource = null;
                 _isTranscribing = false;
             }
             finally
@@ -239,18 +222,37 @@ public sealed class DictationController : IDisposable
         }
     }
 
+    public async Task<bool> CancelTranscriptionAsync()
+    {
+        await _stateLock.WaitAsync();
+
+        try
+        {
+            if (!_isTranscribing || _transcriptionCancellationTokenSource is null)
+            {
+                return false;
+            }
+
+            PublishStatus(DictationState.Cancelling, "Cancelling transcription...", false);
+            _transcriptionCancellationTokenSource.Cancel();
+            return true;
+        }
+        finally
+        {
+            _stateLock.Release();
+        }
+    }
+
     public async Task<bool> PasteLastTranscriptAsync(HotkeyBinding? triggeringHotkey = null)
     {
-        DiagnosticsLogger.Info("PasteLastTranscriptAsync entered.");
         string? lastTranscript = null;
 
         try
         {
             lastTranscript = await _transcriptHistoryStore.GetLatestTranscriptAsync();
         }
-        catch (Exception exception)
+        catch
         {
-            DiagnosticsLogger.Error("Transcript history could not be read for paste.", exception);
         }
 
         await _stateLock.WaitAsync();
@@ -266,28 +268,101 @@ public sealed class DictationController : IDisposable
 
         if (string.IsNullOrWhiteSpace(lastTranscript))
         {
-            DiagnosticsLogger.Info("PasteLastTranscriptAsync ignored because no transcript is available.");
-            _trayIconService.ShowNotification("No transcript available", "Record and transcribe audio before using paste last transcript.", true);
+            PublishStatus(DictationState.Error, "No transcript is available yet.", false);
+            _notificationService.ShowNotification("No transcript available", "Record and transcribe audio before using paste last transcript.", true);
             return false;
         }
 
         try
         {
             await _clipboardPasteService.PasteTextAsync(lastTranscript, triggeringHotkey);
-            DiagnosticsLogger.Info("PasteLastTranscriptAsync completed successfully.");
+            PublishStatus(DictationState.Idle, "Latest transcript pasted.", false);
             return true;
         }
         catch (Exception exception)
         {
-            DiagnosticsLogger.Error("PasteLastTranscriptAsync failed.", exception);
-            _trayIconService.ShowNotification("Paste failed", exception.Message, true);
+            PublishStatus(DictationState.Error, exception.Message, false);
+            _notificationService.ShowNotification("Paste failed", exception.Message, true);
             return false;
         }
     }
 
     public void Dispose()
     {
+        _transcriptionCancellationTokenSource?.Cancel();
+        _transcriptionCancellationTokenSource?.Dispose();
         _activeRecorder?.Dispose();
         _stateLock.Dispose();
+    }
+
+    private async Task<string> TranscribeWithRetryAsync(byte[] audioBytes, AppSettings settings, CancellationToken cancellationToken)
+    {
+        for (var attempt = 1; ; attempt++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            try
+            {
+                if (attempt > 1)
+                {
+                    PublishStatus(DictationState.Transcribing, $"Retrying transcription ({attempt}/{MaxRetryCount + 1})...", true);
+                }
+
+                return await GetTranscriptionClient(settings).TranscribeAsync(
+                    audioBytes,
+                    GetApiKey(settings),
+                    GetModel(settings),
+                    GetLanguage(settings),
+                    cancellationToken);
+            }
+            catch (TranscriptionException exception) when (exception.IsTransient && attempt <= MaxRetryCount)
+            {
+                await Task.Delay(TimeSpan.FromMilliseconds(350 * attempt), cancellationToken);
+            }
+        }
+    }
+
+    private void PublishStatus(DictationState state, string message, bool canCancel)
+    {
+        DiagnosticsLogger.Info($"Dictation status changed. State={state}, Message='{message}', CanCancel={canCancel}.");
+        StatusChanged?.Invoke(this, new DictationStatusChangedEventArgs(state, message, canCancel));
+    }
+
+    private ITranscriptionClient GetTranscriptionClient(AppSettings settings)
+    {
+        return _transcriptionClientFactory.GetClient(settings.Provider);
+    }
+
+    private static bool HasProviderApiKey(AppSettings settings)
+    {
+        return !string.IsNullOrWhiteSpace(GetApiKey(settings));
+    }
+
+    private static string GetApiKey(AppSettings settings)
+    {
+        return settings.Provider == TranscriptionProvider.Fireworks
+            ? settings.FireworksApiKey ?? string.Empty
+            : settings.GroqApiKey ?? string.Empty;
+    }
+
+    private static string GetModel(AppSettings settings)
+    {
+        return settings.Provider == TranscriptionProvider.Fireworks
+            ? settings.FireworksModel
+            : settings.GroqModel;
+    }
+
+    private static string GetLanguage(AppSettings settings)
+    {
+        return settings.Provider == TranscriptionProvider.Fireworks
+            ? settings.FireworksLanguage
+            : settings.GroqLanguage;
+    }
+
+    private static string GetMissingApiKeyMessage(TranscriptionProvider provider)
+    {
+        return provider == TranscriptionProvider.Fireworks
+            ? "Open Settings and save a Fireworks API key before dictating."
+            : "Open Settings and save a Groq API key before dictating.";
     }
 }
