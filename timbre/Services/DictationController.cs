@@ -1,4 +1,5 @@
-﻿using timbre.Interfaces;
+﻿using NAudio.Wave;
+using timbre.Interfaces;
 using timbre.Models;
 
 namespace timbre.Services;
@@ -7,6 +8,7 @@ public sealed class DictationController : IDictationController
 {
     private const int GroqUploadLimitBytes = 25 * 1024 * 1024;
     private const int MaxRetryCount = 2;
+    private static readonly TimeSpan MinimumTranscribableDuration = TimeSpan.FromSeconds(0.25);
 
     private readonly IAppSettingsStore _settingsStore;
     private readonly IAudioDeviceService _audioDeviceService;
@@ -106,8 +108,6 @@ public sealed class DictationController : IDictationController
 
             _activeRecorder = null;
             _isTranscribing = true;
-            _transcriptionCancellationTokenSource = new CancellationTokenSource();
-            PublishStatus(DictationState.Transcribing, "Transcribing...", true);
         }
         finally
         {
@@ -136,6 +136,15 @@ public sealed class DictationController : IDictationController
                 return true;
             }
 
+            var audioDuration = GetAudioDuration(audioBytes);
+            if (audioDuration < MinimumTranscribableDuration)
+            {
+                DiagnosticsLogger.Info(
+                    $"Recording ignored because it was shorter than the minimum transcription threshold. DurationMs={audioDuration.TotalMilliseconds:F0}, ThresholdMs={MinimumTranscribableDuration.TotalMilliseconds:F0}, AudioBytes={audioBytes.Length}.");
+                PublishStatus(DictationState.Idle, string.Empty, false);
+                return true;
+            }
+
             if (audioBytes.Length > GroqUploadLimitBytes)
             {
                 PublishStatus(DictationState.Error, "The recording exceeded Groq's upload limit.", false);
@@ -150,6 +159,9 @@ public sealed class DictationController : IDictationController
                 _notificationService.ShowNotification("API key missing", GetMissingApiKeyMessage(settings.Provider), true);
                 return true;
             }
+
+            _transcriptionCancellationTokenSource = new CancellationTokenSource();
+            PublishStatus(DictationState.Transcribing, "Transcribing...", true);
 
             string transcription;
 
@@ -365,4 +377,12 @@ public sealed class DictationController : IDictationController
             ? "Open Settings and save a Fireworks API key before dictating."
             : "Open Settings and save a Groq API key before dictating.";
     }
+
+    private static TimeSpan GetAudioDuration(byte[] audioBytes)
+    {
+        using var audioStream = new MemoryStream(audioBytes);
+        using var waveReader = new WaveFileReader(audioStream);
+        return waveReader.TotalTime;
+    }
 }
+

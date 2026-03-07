@@ -69,6 +69,8 @@ public static class Program
         services.AddSingleton<ITranscriptionClientFactory, TranscriptionClientFactory>();
         services.AddSingleton<IDictationController, DictationController>();
         services.AddSingleton<MainViewModel>();
+        services.AddTransient<TranscriptionHistoryViewModel>();
+        services.AddTransient<TranscriptionHistoryWindow>();
         services.AddSingleton<MainWindow>();
         services.AddSingleton<AppCoordinator>();
 

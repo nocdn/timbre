@@ -1,4 +1,4 @@
-﻿using timbre.Models;
+using timbre.Models;
 
 namespace timbre.ViewModels;
 
@@ -9,7 +9,6 @@ public sealed class TranscriptHistoryItemViewModel
         EntryId = entry.Id;
         Text = entry.Text;
         CreatedAtDisplay = entry.CreatedAtUtc.ToLocalTime().ToString("g");
-        PreviewText = entry.Text.Length <= 220 ? entry.Text : entry.Text[..220] + "...";
     }
 
     public string EntryId { get; }
@@ -18,5 +17,13 @@ public sealed class TranscriptHistoryItemViewModel
 
     public string CreatedAtDisplay { get; }
 
-    public string PreviewText { get; }
+    public bool MatchesSearch(string? searchText)
+    {
+        if (string.IsNullOrWhiteSpace(searchText))
+        {
+            return true;
+        }
+
+        return Text.Contains(searchText.Trim(), StringComparison.CurrentCultureIgnoreCase);
+    }
 }

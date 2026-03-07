@@ -10,7 +10,7 @@
 
     <Grid
         x:Name="RootGrid"
-        Padding="20"
+        Padding="20,20,0,20"
         RowSpacing="16">
         <Grid.RowDefinitions>
             <RowDefinition Height="*" />
@@ -18,7 +18,9 @@
         </Grid.RowDefinitions>
 
         <ScrollViewer Grid.Row="0">
-            <StackPanel Spacing="16">
+            <StackPanel
+                Margin="0,0,20,0"
+                Spacing="16">
                 <TextBlock
                     Text="Timbre"
                     Style="{ThemeResource TitleTextBlockStyle}" />
@@ -39,6 +41,7 @@
                                     Width="420"
                                     Header="Input device"
                                     DisplayMemberPath="DisplayName"
+                                    SelectionChanged="SettingsComboBox_SelectionChanged"
                                     PlaceholderText="Select a microphone" />
                                 <Button
                                     x:Name="RefreshDevicesButton"
@@ -50,10 +53,16 @@
 
                         <StackPanel Spacing="6">
                             <TextBlock Text="Recording hotkey" />
-                            <Button
-                                x:Name="HotkeyCaptureButton"
-                                HorizontalAlignment="Left"
-                                Click="HotkeyCaptureButton_Click" />
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <Button
+                                    x:Name="HotkeyCaptureButton"
+                                    HorizontalAlignment="Left"
+                                    Click="HotkeyCaptureButton_Click" />
+                                <Button
+                                    x:Name="ResetHotkeyButton"
+                                    Click="ResetHotkeyButton_Click"
+                                    Content="Reset to default" />
+                            </StackPanel>
                             <TextBlock
                                 Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                 Text="Click the button, then press the new hotkey."
@@ -62,10 +71,16 @@
 
                         <StackPanel Spacing="6">
                             <TextBlock Text="Paste last transcript hotkey" />
-                            <Button
-                                x:Name="PasteLastTranscriptHotkeyCaptureButton"
-                                HorizontalAlignment="Left"
-                                Click="PasteLastTranscriptHotkeyCaptureButton_Click" />
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <Button
+                                    x:Name="PasteLastTranscriptHotkeyCaptureButton"
+                                    HorizontalAlignment="Left"
+                                    Click="PasteLastTranscriptHotkeyCaptureButton_Click" />
+                                <Button
+                                    x:Name="ResetPasteLastTranscriptHotkeyButton"
+                                    Click="ResetPasteLastTranscriptHotkeyButton_Click"
+                                    Content="Reset to default" />
+                            </StackPanel>
                             <TextBlock
                                 Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                 Text="This hotkey pastes the latest completed transcript into the active text field."
@@ -85,6 +100,7 @@
                                 Minimum="0"
                                 Maximum="500"
                                 SmallChange="1"
+                                ValueChanged="TranscriptHistoryLimitNumberBox_ValueChanged"
                                 SpinButtonPlacementMode="Compact" />
                             <TextBlock
                                 Foreground="{ThemeResource TextFillColorSecondaryBrush}"
@@ -95,6 +111,7 @@
                         <StackPanel Spacing="6">
                             <ToggleSwitch
                                 x:Name="PushToTalkToggle"
+                                Toggled="PushToTalkToggle_Toggled"
                                 Header="Push to talk" />
                             <TextBlock
                                 Foreground="{ThemeResource TextFillColorSecondaryBrush}"
@@ -131,10 +148,12 @@
                     <StackPanel Spacing="14">
                         <PasswordBox
                             x:Name="GroqApiKeyBox"
+                            PasswordChanged="SettingsPasswordBox_PasswordChanged"
                             Header="Groq API key" />
 
                         <ComboBox
                             x:Name="GroqModelComboBox"
+                            SelectionChanged="SettingsComboBox_SelectionChanged"
                             Header="Groq model"
                             PlaceholderText="Select a Groq model" />
 
@@ -142,6 +161,7 @@
                             <TextBox
                                 x:Name="GroqLanguageTextBox"
                                 Header="Language"
+                                TextChanged="SettingsTextBox_TextChanged"
                                 PlaceholderText="en" />
                             <TextBlock
                                 Foreground="{ThemeResource TextFillColorSecondaryBrush}"
@@ -160,10 +180,12 @@
                     <StackPanel Spacing="14">
                         <PasswordBox
                             x:Name="FireworksApiKeyBox"
+                            PasswordChanged="SettingsPasswordBox_PasswordChanged"
                             Header="Fireworks API key" />
 
                         <ComboBox
                             x:Name="FireworksModelComboBox"
+                            SelectionChanged="SettingsComboBox_SelectionChanged"
                             Header="Fireworks model"
                             PlaceholderText="Select a Fireworks model" />
 
@@ -171,6 +193,7 @@
                             <TextBox
                                 x:Name="FireworksLanguageTextBox"
                                 Header="Language"
+                                TextChanged="SettingsTextBox_TextChanged"
                                 PlaceholderText="en" />
                             <TextBlock
                                 Foreground="{ThemeResource TextFillColorSecondaryBrush}"
@@ -185,47 +208,16 @@
                         Text="Transcript history"
                         Style="{ThemeResource SubtitleTextBlockStyle}" />
                     <StackPanel Spacing="12">
-                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
-                            <Button
-                                x:Name="ClearHistoryButton"
-                                Click="ClearHistoryButton_Click"
-                                Content="Clear all" />
-                        </StackPanel>
-
                         <TextBlock
-                            x:Name="HistoryEmptyTextBlock"
                             Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                            Text="No transcripts have been saved yet." />
+                            Text="Open a separate window to search, review, copy, and delete saved transcripts."
+                            TextWrapping="WrapWholeWords" />
 
-                        <ItemsRepeater x:Name="TranscriptHistoryRepeater">
-                            <ItemsRepeater.Layout>
-                                <StackLayout Spacing="10" />
-                            </ItemsRepeater.Layout>
-                            <ItemsRepeater.ItemTemplate>
-                                <DataTemplate>
-                                    <Border
-                                        Padding="12"
-                                        Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
-                                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-                                        BorderThickness="1"
-                                        CornerRadius="8">
-                                        <StackPanel Spacing="8">
-                                            <TextBlock
-                                                FontSize="12"
-                                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                                Text="{Binding CreatedAtDisplay}" />
-                                            <TextBlock
-                                                Text="{Binding PreviewText}"
-                                                TextWrapping="WrapWholeWords" />
-                                            <StackPanel Orientation="Horizontal" Spacing="8">
-                                                <Button Click="CopyHistoryItemButton_Click" Content="Copy" />
-                                                <Button Click="DeleteHistoryItemButton_Click" Content="Delete" />
-                                            </StackPanel>
-                                        </StackPanel>
-                                    </Border>
-                                </DataTemplate>
-                            </ItemsRepeater.ItemTemplate>
-                        </ItemsRepeater>
+                        <Button
+                            x:Name="OpenHistoryButton"
+                            Click="OpenHistoryButton_Click"
+                            Content="Open history"
+                            HorizontalAlignment="Left" />
                     </StackPanel>
                 </StackPanel>
             </StackPanel>
@@ -241,7 +233,7 @@
             <TextBlock
                 x:Name="StatusTextBlock"
                 VerticalAlignment="Center"
-                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                Foreground="{ThemeResource TextFillColorPrimaryBrush}"
                 TextWrapping="WrapWholeWords" />
 
             <Button

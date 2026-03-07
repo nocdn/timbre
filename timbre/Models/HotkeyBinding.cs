@@ -44,7 +44,8 @@ public sealed class HotkeyBinding : IEquatable<HotkeyBinding>
 
     public static HotkeyBinding PasteLastTranscriptDefault => new()
     {
-        Alt = true,
+        Shift = true,
+        KeyCode = 0x50,
     };
 
     public bool Equals(HotkeyBinding? other)

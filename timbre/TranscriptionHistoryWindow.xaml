@@ -1,0 +1,98 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Window
+    x:Class="timbre.TranscriptionHistoryWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d"
+    Title="Transcription History">
+
+    <Grid
+        x:Name="RootGrid"
+        Padding="20,20,0,20"
+        RowSpacing="16">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <Grid ColumnSpacing="12">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+
+            <TextBox
+                x:Name="SearchTextBox"
+                PlaceholderText="Search transcripts"
+                Margin="0,0,20,0"
+                TextChanged="SearchTextBox_TextChanged" />
+
+            <Button
+                x:Name="ClearHistoryButton"
+                Grid.Column="1"
+                Margin="0,0,20,0"
+                Click="ClearHistoryButton_Click"
+                Content="Clear all" />
+        </Grid>
+
+        <Grid Grid.Row="1">
+            <TextBlock
+                x:Name="EmptyStateTextBlock"
+                Margin="0,0,20,0"
+                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                TextWrapping="WrapWholeWords" />
+
+            <ScrollViewer x:Name="HistoryScrollViewer">
+                <ItemsRepeater
+                    x:Name="HistoryItemsRepeater"
+                    Margin="0,0,20,0">
+                    <ItemsRepeater.Layout>
+                        <StackLayout Spacing="10" />
+                    </ItemsRepeater.Layout>
+                    <ItemsRepeater.ItemTemplate>
+                        <DataTemplate>
+                            <Border
+                                Padding="12"
+                                Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                BorderThickness="1"
+                                CornerRadius="8">
+                                    <Grid ColumnSpacing="12">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+
+                                    <StackPanel Grid.Column="0" Spacing="4">
+                                        <TextBlock
+                                            FontSize="12"
+                                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                            Text="{Binding CreatedAtDisplay}" />
+                                        <TextBlock
+                                            Text="{Binding Text}"
+                                            TextWrapping="WrapWholeWords" />
+                                    </StackPanel>
+
+                                    <Button
+                                        Grid.Column="1"
+                                        VerticalAlignment="Top"
+                                        Click="CopyHistoryItemButton_Click"
+                                        Content="Copy" />
+
+                                    <Button
+                                        Grid.Column="2"
+                                        VerticalAlignment="Top"
+                                        Click="DeleteHistoryItemButton_Click"
+                                        Content="Delete" />
+                                </Grid>
+                            </Border>
+                        </DataTemplate>
+                    </ItemsRepeater.ItemTemplate>
+                </ItemsRepeater>
+            </ScrollViewer>
+        </Grid>
+    </Grid>
+</Window>

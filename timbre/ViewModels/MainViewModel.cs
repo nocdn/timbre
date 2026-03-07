@@ -279,7 +279,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         return Task.CompletedTask;
     }
 
-    public async Task SaveSettingsAsync()
+    public async Task<bool> SaveSettingsAsync()
     {
         var validation = HotkeyValidationService.Validate(_pendingHotkey, _pendingPasteLastTranscriptHotkey);
         HotkeyWarningMessage = string.Join(" ", validation.Warnings);
@@ -287,7 +287,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         if (validation.HasErrors)
         {
             StatusMessage = string.Join(" ", validation.Errors);
-            return;
+            return false;
         }
 
         var settings = new AppSettings
@@ -309,9 +309,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
         await _settingsStore.SaveAsync(settings);
         SettingsSaved?.Invoke(settings);
-        StatusMessage = validation.HasWarnings
-            ? $"Settings saved. Warning: {validation.Warnings[0]}"
-            : "Settings saved.";
+        StatusMessage = string.Empty;
+        return true;
     }
 
     public async Task CancelTranscriptionAsync()
@@ -352,7 +351,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         _pendingHotkey = hotkey;
         RecordingHotkeyDisplay = hotkey.ToDisplayString();
         RefreshHotkeyWarnings();
-        StatusMessage = $"Recording hotkey set to {RecordingHotkeyDisplay}. Click Save to apply.";
+        StatusMessage = string.Empty;
     }
 
     public void ApplyPasteLastTranscriptHotkey(HotkeyBinding hotkey)
@@ -360,7 +359,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         _pendingPasteLastTranscriptHotkey = hotkey;
         PasteLastTranscriptHotkeyDisplay = hotkey.ToDisplayString();
         RefreshHotkeyWarnings();
-        StatusMessage = $"Paste last transcript hotkey set to {PasteLastTranscriptHotkeyDisplay}. Click Save to apply.";
+        StatusMessage = string.Empty;
     }
 
     public void Dispose()
