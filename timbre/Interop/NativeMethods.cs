@@ -6,6 +6,11 @@ internal static class NativeMethods
 {
     public const int GWL_WNDPROC = -4;
     public const int WH_KEYBOARD_LL = 13;
+    public const int DWMWA_USE_IMMERSIVE_DARK_MODE = 20;
+    public const int DWMWA_BORDER_COLOR = 34;
+    public const int DWMWA_CAPTION_COLOR = 35;
+    public const int DWMWA_TEXT_COLOR = 36;
+    public const uint DWMWA_COLOR_DEFAULT = 0xFFFFFFFF;
 
     public const uint WM_NULL = 0x0000;
     public const uint WM_SIZE = 0x0005;
@@ -311,4 +316,10 @@ internal static class NativeMethods
 
     [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
     public static extern int MessageBox(IntPtr hWnd, string lpText, string lpCaption, uint uType);
+
+    [DllImport("dwmapi.dll", PreserveSig = true)]
+    public static extern int DwmSetWindowAttribute(IntPtr hwnd, int dwAttribute, ref int pvAttribute, int cbAttribute);
+
+    [DllImport("dwmapi.dll", PreserveSig = true)]
+    public static extern int DwmSetWindowAttribute(IntPtr hwnd, int dwAttribute, ref uint pvAttribute, int cbAttribute);
 }

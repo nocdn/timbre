@@ -2,6 +2,7 @@ using System.Collections.Specialized;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Media;
 using timbre.Interop;
 using timbre.ViewModels;
 using Windows.Graphics;
@@ -23,6 +24,7 @@ public sealed partial class TranscriptionHistoryWindow : Window
 
         _windowHandle = WindowNative.GetWindowHandle(this);
         ConfigureWindowAppearance();
+        RootGrid.ActualThemeChanged += OnRootGridActualThemeChanged;
 
         HistoryItemsRepeater.ItemsSource = _viewModel.VisibleEntries;
         _viewModel.VisibleEntries.CollectionChanged += OnVisibleEntriesChanged;
@@ -52,6 +54,8 @@ public sealed partial class TranscriptionHistoryWindow : Window
             presenter.IsMaximizable = true;
             presenter.IsMinimizable = true;
         }
+
+        ApplyWindowTheme();
     }
 
     private void ApplyViewModelToControls()
@@ -157,8 +161,67 @@ public sealed partial class TranscriptionHistoryWindow : Window
         await dialog.ShowAsync();
     }
 
+    private void OnRootGridActualThemeChanged(FrameworkElement sender, object args)
+    {
+        ApplyWindowTheme();
+    }
+
+    private void ApplyWindowTheme()
+    {
+        var isDark = RootGrid.ActualTheme == ElementTheme.Dark;
+        var darkMode = isDark ? 1 : 0;
+        _ = NativeMethods.DwmSetWindowAttribute(
+            _windowHandle,
+            NativeMethods.DWMWA_USE_IMMERSIVE_DARK_MODE,
+            ref darkMode,
+            sizeof(int));
+
+        if (isDark)
+        {
+            var captionColor = GetColorRef("SolidBackgroundFillColorBaseBrush");
+            var textColor = GetColorRef("TextFillColorPrimaryBrush");
+            _ = NativeMethods.DwmSetWindowAttribute(
+                _windowHandle,
+                NativeMethods.DWMWA_CAPTION_COLOR,
+                ref captionColor,
+                sizeof(uint));
+            _ = NativeMethods.DwmSetWindowAttribute(
+                _windowHandle,
+                NativeMethods.DWMWA_TEXT_COLOR,
+                ref textColor,
+                sizeof(uint));
+        }
+        else
+        {
+            var defaultColor = NativeMethods.DWMWA_COLOR_DEFAULT;
+            _ = NativeMethods.DwmSetWindowAttribute(
+                _windowHandle,
+                NativeMethods.DWMWA_CAPTION_COLOR,
+                ref defaultColor,
+                sizeof(uint));
+            _ = NativeMethods.DwmSetWindowAttribute(
+                _windowHandle,
+                NativeMethods.DWMWA_TEXT_COLOR,
+                ref defaultColor,
+                sizeof(uint));
+            _ = NativeMethods.DwmSetWindowAttribute(
+                _windowHandle,
+                NativeMethods.DWMWA_BORDER_COLOR,
+                ref defaultColor,
+                sizeof(uint));
+        }
+    }
+
+    private static uint GetColorRef(string resourceKey)
+    {
+        var brush = (SolidColorBrush)Application.Current.Resources[resourceKey];
+        var color = brush.Color;
+        return (uint)(color.R | (color.G << 8) | (color.B << 16));
+    }
+
     private void OnClosed(object sender, WindowEventArgs args)
     {
+        RootGrid.ActualThemeChanged -= OnRootGridActualThemeChanged;
         _viewModel.VisibleEntries.CollectionChanged -= OnVisibleEntriesChanged;
         _viewModel.Dispose();
     }

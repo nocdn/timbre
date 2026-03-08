@@ -41,6 +41,7 @@ public sealed partial class MainWindow : Window
         _previousWindowProc = NativeMethods.SetWindowLongPtr(_windowHandle, NativeMethods.GWL_WNDPROC, _windowProc);
 
         ConfigureWindowAppearance();
+        RootGrid.ActualThemeChanged += OnRootGridActualThemeChanged;
         Closed += OnClosed;
         _viewModel.SettingsSaved += OnSettingsSaved;
     }
@@ -91,6 +92,8 @@ public sealed partial class MainWindow : Window
             presenter.IsMaximizable = true;
             presenter.IsMinimizable = true;
         }
+
+        ApplyWindowTheme();
     }
 
     private void ApplyViewModelToControls()
@@ -363,6 +366,64 @@ public sealed partial class MainWindow : Window
         await dialog.ShowAsync();
     }
 
+    private void OnRootGridActualThemeChanged(FrameworkElement sender, object args)
+    {
+        ApplyWindowTheme();
+    }
+
+    private void ApplyWindowTheme()
+    {
+        var isDark = RootGrid.ActualTheme == ElementTheme.Dark;
+        var darkMode = isDark ? 1 : 0;
+        _ = NativeMethods.DwmSetWindowAttribute(
+            _windowHandle,
+            NativeMethods.DWMWA_USE_IMMERSIVE_DARK_MODE,
+            ref darkMode,
+            sizeof(int));
+
+        if (isDark)
+        {
+            var captionColor = GetColorRef("SolidBackgroundFillColorBaseBrush");
+            var textColor = GetColorRef("TextFillColorPrimaryBrush");
+            _ = NativeMethods.DwmSetWindowAttribute(
+                _windowHandle,
+                NativeMethods.DWMWA_CAPTION_COLOR,
+                ref captionColor,
+                sizeof(uint));
+            _ = NativeMethods.DwmSetWindowAttribute(
+                _windowHandle,
+                NativeMethods.DWMWA_TEXT_COLOR,
+                ref textColor,
+                sizeof(uint));
+        }
+        else
+        {
+            var defaultColor = NativeMethods.DWMWA_COLOR_DEFAULT;
+            _ = NativeMethods.DwmSetWindowAttribute(
+                _windowHandle,
+                NativeMethods.DWMWA_CAPTION_COLOR,
+                ref defaultColor,
+                sizeof(uint));
+            _ = NativeMethods.DwmSetWindowAttribute(
+                _windowHandle,
+                NativeMethods.DWMWA_TEXT_COLOR,
+                ref defaultColor,
+                sizeof(uint));
+            _ = NativeMethods.DwmSetWindowAttribute(
+                _windowHandle,
+                NativeMethods.DWMWA_BORDER_COLOR,
+                ref defaultColor,
+                sizeof(uint));
+        }
+    }
+
+    private static uint GetColorRef(string resourceKey)
+    {
+        var brush = (SolidColorBrush)Application.Current.Resources[resourceKey];
+        var color = brush.Color;
+        return (uint)(color.R | (color.G << 8) | (color.B << 16));
+    }
+
     private IntPtr HandleWindowMessage(IntPtr hWnd, uint message, IntPtr wParam, IntPtr lParam)
     {
         if (_trayIconService is not null && _trayIconService.HandleWindowMessage(message, wParam, lParam))
@@ -397,6 +458,7 @@ public sealed partial class MainWindow : Window
 
     private void OnClosed(object sender, WindowEventArgs args)
     {
+        RootGrid.ActualThemeChanged -= OnRootGridActualThemeChanged;
         _autoSaveCancellationTokenSource?.Cancel();
         _autoSaveCancellationTokenSource?.Dispose();
 
