@@ -25,6 +25,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private readonly ITranscriptHistoryStore _transcriptHistoryStore;
     private readonly IClipboardPasteService _clipboardPasteService;
     private readonly IDictationController _dictationController;
+    private readonly ILaunchAtStartupService _launchAtStartupService;
     private readonly IUiDispatcherQueueAccessor _uiDispatcherQueueAccessor;
 
     private AudioInputDevice? _selectedInputDevice;
@@ -32,8 +33,9 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private string _groqApiKey = string.Empty;
     private string _fireworksApiKey = string.Empty;
     private bool _pushToTalk = true;
-    private int _transcriptHistoryLimit = 20;
-    private double _transcriptHistoryLimitValue = 20;
+    private bool _launchAtStartup;
+    private int _transcriptHistoryLimit = 200;
+    private double _transcriptHistoryLimitValue = 200;
     private string _selectedGroqModel = GroqModels[0];
     private string _selectedFireworksModel = FireworksModels[0];
     private string _groqLanguage = "en";
@@ -57,6 +59,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         ITranscriptHistoryStore transcriptHistoryStore,
         IClipboardPasteService clipboardPasteService,
         IDictationController dictationController,
+        ILaunchAtStartupService launchAtStartupService,
         IUiDispatcherQueueAccessor uiDispatcherQueueAccessor)
     {
         _settingsStore = settingsStore;
@@ -64,6 +67,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         _transcriptHistoryStore = transcriptHistoryStore;
         _clipboardPasteService = clipboardPasteService;
         _dictationController = dictationController;
+        _launchAtStartupService = launchAtStartupService;
         _uiDispatcherQueueAccessor = uiDispatcherQueueAccessor;
 
         _transcriptHistoryStore.HistoryChanged += OnHistoryChanged;
@@ -125,6 +129,12 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     {
         get => _pushToTalk;
         set => SetProperty(ref _pushToTalk, value);
+    }
+
+    public bool LaunchAtStartup
+    {
+        get => _launchAtStartup;
+        set => SetProperty(ref _launchAtStartup, value);
     }
 
     public int TranscriptHistoryLimit
@@ -251,6 +261,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     {
         var settings = await _settingsStore.LoadAsync(forceReload);
         ApplySettings(settings);
+        LaunchAtStartup = _launchAtStartupService.IsEnabled();
         await ReloadDevicesAsync();
         await LoadHistoryAsync();
 
@@ -298,6 +309,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             return false;
         }
 
+        _launchAtStartupService.SetEnabled(LaunchAtStartup);
+
         var settings = new AppSettings
         {
             SelectedInputDeviceId = SelectedInputDevice?.Id,
@@ -309,6 +322,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             OpenHistoryHotkey = _pendingOpenHistoryHotkey,
             TranscriptHistoryLimit = TranscriptHistoryLimit,
             PushToTalk = PushToTalk,
+            LaunchAtStartup = LaunchAtStartup,
             GroqModel = string.IsNullOrWhiteSpace(SelectedGroqModel) ? GroqModels[0] : SelectedGroqModel,
             GroqLanguage = NormalizeLanguage(GroqLanguage),
             FireworksModel = string.IsNullOrWhiteSpace(SelectedFireworksModel) ? FireworksModels[0] : SelectedFireworksModel,
@@ -391,6 +405,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         GroqApiKey = settings.GroqApiKey ?? string.Empty;
         FireworksApiKey = settings.FireworksApiKey ?? string.Empty;
         PushToTalk = settings.PushToTalk;
+        LaunchAtStartup = settings.LaunchAtStartup;
         TranscriptHistoryLimit = settings.TranscriptHistoryLimit;
         TranscriptHistoryLimitValue = settings.TranscriptHistoryLimit;
         SelectedGroqModel = GroqModels.FirstOrDefault(model => model == settings.GroqModel) ?? GroqModels[0];
@@ -474,7 +489,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     {
         if (double.IsNaN(value) || double.IsInfinity(value))
         {
-            return 20;
+            return 200;
         }
 
         return Math.Clamp((int)Math.Round(value), 0, 500);

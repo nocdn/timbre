@@ -112,6 +112,7 @@ public sealed partial class MainWindow : Window
             OpenHistoryHotkeyCaptureButton.Content = _viewModel.OpenHistoryHotkeyDisplay;
             TranscriptHistoryLimitNumberBox.Value = _viewModel.TranscriptHistoryLimitValue;
             PushToTalkToggle.IsOn = _viewModel.PushToTalk;
+            LaunchAtStartupToggle.IsOn = _viewModel.LaunchAtStartup;
             GroqApiKeyBox.Password = _viewModel.GroqApiKey;
             GroqModelComboBox.ItemsSource = _viewModel.AvailableGroqModels;
             GroqModelComboBox.SelectedItem = _viewModel.SelectedGroqModel;
@@ -223,6 +224,11 @@ public sealed partial class MainWindow : Window
     }
 
     private void PushToTalkToggle_Toggled(object sender, RoutedEventArgs e)
+    {
+        QueueAutoSave();
+    }
+
+    private void LaunchAtStartupToggle_Toggled(object sender, RoutedEventArgs e)
     {
         QueueAutoSave();
     }
@@ -387,6 +393,7 @@ public sealed partial class MainWindow : Window
         _viewModel.GroqApiKey = GroqApiKeyBox.Password;
         _viewModel.FireworksApiKey = FireworksApiKeyBox.Password;
         _viewModel.PushToTalk = PushToTalkToggle.IsOn;
+        _viewModel.LaunchAtStartup = LaunchAtStartupToggle.IsOn;
         _viewModel.TranscriptHistoryLimitValue = TranscriptHistoryLimitNumberBox.Value;
         _viewModel.SelectedGroqModel = GroqModelComboBox.SelectedItem as string ?? _viewModel.AvailableGroqModels[0];
         _viewModel.GroqLanguage = GroqLanguageTextBox.Text;

@@ -200,6 +200,22 @@
 
                 <StackPanel Spacing="12">
                     <TextBlock
+                        Text="Launch at startup"
+                        Style="{ThemeResource SubtitleTextBlockStyle}" />
+                    <StackPanel Spacing="6">
+                        <ToggleSwitch
+                            x:Name="LaunchAtStartupToggle"
+                            Header="Launch Timbre when you sign in"
+                            Toggled="LaunchAtStartupToggle_Toggled" />
+                        <TextBlock
+                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                            Text="When on, Timbre starts automatically after you sign in and stays in the tray until you open it."
+                            TextWrapping="WrapWholeWords" />
+                    </StackPanel>
+                </StackPanel>
+
+                <StackPanel Spacing="12">
+                    <TextBlock
                         Text="Transcript history"
                         Style="{ThemeResource SubtitleTextBlockStyle}" />
                     <StackPanel Spacing="12">

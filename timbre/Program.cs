@@ -31,10 +31,11 @@ public static class Program
             var context = new DispatcherQueueSynchronizationContext(DispatcherQueue.GetForCurrentThread());
             SynchronizationContext.SetSynchronizationContext(context);
 
+            var startHidden = args.Any(argument => string.Equals(argument, LaunchArguments.Background, StringComparison.OrdinalIgnoreCase));
             var services = ConfigureServices();
             var app = new App(services);
             var coordinator = services.GetRequiredService<AppCoordinator>();
-            _ = coordinator.InitializeAsync();
+            _ = coordinator.InitializeAsync(startHidden);
         });
 
         return 0;
@@ -50,6 +51,7 @@ public static class Program
         services.AddSingleton<ITranscriptHistoryStore, TranscriptHistoryStore>();
         services.AddSingleton<INotificationService, NotificationService>();
         services.AddSingleton<IClipboardPasteService, ClipboardPasteService>();
+        services.AddSingleton<ILaunchAtStartupService, LaunchAtStartupService>();
         services.AddSingleton<GroqTranscriptionClient>(_ =>
         {
             var httpClient = new HttpClient

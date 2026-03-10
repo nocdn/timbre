@@ -16,9 +16,11 @@ public sealed class AppSettings
 
     public HotkeyBinding OpenHistoryHotkey { get; init; } = HotkeyBinding.OpenHistoryDefault;
 
-    public int TranscriptHistoryLimit { get; init; } = 20;
+    public int TranscriptHistoryLimit { get; init; } = 200;
 
     public bool PushToTalk { get; init; } = true;
+
+    public bool LaunchAtStartup { get; init; }
 
     public string GroqModel { get; init; } = "whisper-large-v3-turbo";
 

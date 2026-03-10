@@ -41,14 +41,13 @@ public sealed class AppCoordinator
 
     public static AppCoordinator? Current { get; private set; }
 
-    public async Task InitializeAsync()
+    public async Task InitializeAsync(bool startHidden = false)
     {
         _uiDispatcherQueueAccessor.DispatcherQueue = _mainWindow.DispatcherQueue;
         _currentSettings = await _settingsStore.LoadAsync();
         await _transcriptHistoryStore.EnforceRetentionAsync(_currentSettings.TranscriptHistoryLimit);
 
         _mainWindow.SettingsSaved += OnSettingsSaved;
-        _mainWindow.Activate();
 
         _trayIconService = new TrayIconService(() => _mainWindow.ShowSettingsWindowAsync(), QuitApplication);
         _mainWindow.AttachTrayIcon(_trayIconService);
@@ -73,6 +72,12 @@ public sealed class AppCoordinator
             DiagnosticsLogger.Error("Keyboard hook startup failed.", exception);
             _notificationService.ShowNotification("Startup failed", exception.Message, true);
             await _mainWindow.ShowSettingsWindowAsync();
+            return;
+        }
+
+        if (startHidden)
+        {
+            _mainWindow.HideToTray();
             return;
         }
 

@@ -65,8 +65,9 @@ public sealed class AppSettingsStore : IAppSettingsStore
                 Hotkey = storedSettings.Hotkey ?? HotkeyBinding.Default,
                 PasteLastTranscriptHotkey = storedSettings.PasteLastTranscriptHotkey ?? HotkeyBinding.PasteLastTranscriptDefault,
                 OpenHistoryHotkey = storedSettings.OpenHistoryHotkey ?? HotkeyBinding.OpenHistoryDefault,
-                TranscriptHistoryLimit = storedSettings.TranscriptHistoryLimit is null or < 0 ? 20 : storedSettings.TranscriptHistoryLimit.Value,
+                TranscriptHistoryLimit = storedSettings.TranscriptHistoryLimit is null or < 0 ? 200 : storedSettings.TranscriptHistoryLimit.Value,
                 PushToTalk = storedSettings.PushToTalk ?? true,
+                LaunchAtStartup = storedSettings.LaunchAtStartup ?? false,
                 GroqModel = string.IsNullOrWhiteSpace(storedSettings.GroqModel)
                     ? "whisper-large-v3-turbo"
                     : storedSettings.GroqModel,
@@ -79,7 +80,7 @@ public sealed class AppSettingsStore : IAppSettingsStore
             };
 
             DiagnosticsLogger.Info(
-                $"Settings loaded. SelectedInputDeviceId='{_currentSettings.SelectedInputDeviceId}', Provider='{_currentSettings.Provider}', HasGroqApiKey={!string.IsNullOrWhiteSpace(_currentSettings.GroqApiKey)}, HasFireworksApiKey={!string.IsNullOrWhiteSpace(_currentSettings.FireworksApiKey)}, Hotkey='{_currentSettings.Hotkey.ToDisplayString()}', PasteLastTranscriptHotkey='{_currentSettings.PasteLastTranscriptHotkey.ToDisplayString()}', OpenHistoryHotkey='{_currentSettings.OpenHistoryHotkey.ToDisplayString()}', TranscriptHistoryLimit={_currentSettings.TranscriptHistoryLimit}, PushToTalk={_currentSettings.PushToTalk}, GroqModel='{_currentSettings.GroqModel}', GroqLanguage='{_currentSettings.GroqLanguage}', FireworksModel='{_currentSettings.FireworksModel}', FireworksLanguage='{_currentSettings.FireworksLanguage}', HasCompletedInitialSetup={_currentSettings.HasCompletedInitialSetup}.");
+                $"Settings loaded. SelectedInputDeviceId='{_currentSettings.SelectedInputDeviceId}', Provider='{_currentSettings.Provider}', HasGroqApiKey={!string.IsNullOrWhiteSpace(_currentSettings.GroqApiKey)}, HasFireworksApiKey={!string.IsNullOrWhiteSpace(_currentSettings.FireworksApiKey)}, Hotkey='{_currentSettings.Hotkey.ToDisplayString()}', PasteLastTranscriptHotkey='{_currentSettings.PasteLastTranscriptHotkey.ToDisplayString()}', OpenHistoryHotkey='{_currentSettings.OpenHistoryHotkey.ToDisplayString()}', TranscriptHistoryLimit={_currentSettings.TranscriptHistoryLimit}, PushToTalk={_currentSettings.PushToTalk}, LaunchAtStartup={_currentSettings.LaunchAtStartup}, GroqModel='{_currentSettings.GroqModel}', GroqLanguage='{_currentSettings.GroqLanguage}', FireworksModel='{_currentSettings.FireworksModel}', FireworksLanguage='{_currentSettings.FireworksLanguage}', HasCompletedInitialSetup={_currentSettings.HasCompletedInitialSetup}.");
 
             _hasLoadedSettings = true;
             return _currentSettings;
@@ -105,7 +106,7 @@ public sealed class AppSettingsStore : IAppSettingsStore
         try
         {
             DiagnosticsLogger.Info(
-                $"Saving settings. SelectedInputDeviceId='{settings.SelectedInputDeviceId}', Provider='{settings.Provider}', HasGroqApiKey={!string.IsNullOrWhiteSpace(settings.GroqApiKey)}, HasFireworksApiKey={!string.IsNullOrWhiteSpace(settings.FireworksApiKey)}, Hotkey='{settings.Hotkey.ToDisplayString()}', PasteLastTranscriptHotkey='{settings.PasteLastTranscriptHotkey.ToDisplayString()}', OpenHistoryHotkey='{settings.OpenHistoryHotkey.ToDisplayString()}', TranscriptHistoryLimit={settings.TranscriptHistoryLimit}, PushToTalk={settings.PushToTalk}, GroqModel='{settings.GroqModel}', GroqLanguage='{settings.GroqLanguage}', FireworksModel='{settings.FireworksModel}', FireworksLanguage='{settings.FireworksLanguage}'.");
+                $"Saving settings. SelectedInputDeviceId='{settings.SelectedInputDeviceId}', Provider='{settings.Provider}', HasGroqApiKey={!string.IsNullOrWhiteSpace(settings.GroqApiKey)}, HasFireworksApiKey={!string.IsNullOrWhiteSpace(settings.FireworksApiKey)}, Hotkey='{settings.Hotkey.ToDisplayString()}', PasteLastTranscriptHotkey='{settings.PasteLastTranscriptHotkey.ToDisplayString()}', OpenHistoryHotkey='{settings.OpenHistoryHotkey.ToDisplayString()}', TranscriptHistoryLimit={settings.TranscriptHistoryLimit}, PushToTalk={settings.PushToTalk}, LaunchAtStartup={settings.LaunchAtStartup}, GroqModel='{settings.GroqModel}', GroqLanguage='{settings.GroqLanguage}', FireworksModel='{settings.FireworksModel}', FireworksLanguage='{settings.FireworksLanguage}'.");
             var storedSettings = new StoredSettings
             {
                 SelectedInputDeviceId = settings.SelectedInputDeviceId,
@@ -117,6 +118,7 @@ public sealed class AppSettingsStore : IAppSettingsStore
                 OpenHistoryHotkey = settings.OpenHistoryHotkey,
                 TranscriptHistoryLimit = settings.TranscriptHistoryLimit,
                 PushToTalk = settings.PushToTalk,
+                LaunchAtStartup = settings.LaunchAtStartup,
                 GroqModel = settings.GroqModel,
                 GroqLanguage = NormalizeLanguage(settings.GroqLanguage),
                 FireworksModel = settings.FireworksModel,
@@ -137,6 +139,7 @@ public sealed class AppSettingsStore : IAppSettingsStore
                 OpenHistoryHotkey = settings.OpenHistoryHotkey,
                 TranscriptHistoryLimit = settings.TranscriptHistoryLimit,
                 PushToTalk = settings.PushToTalk,
+                LaunchAtStartup = settings.LaunchAtStartup,
                 GroqModel = settings.GroqModel,
                 GroqLanguage = NormalizeLanguage(settings.GroqLanguage),
                 FireworksModel = settings.FireworksModel,
@@ -228,6 +231,8 @@ public sealed class AppSettingsStore : IAppSettingsStore
         public int? TranscriptHistoryLimit { get; set; }
 
         public bool? PushToTalk { get; set; }
+
+        public bool? LaunchAtStartup { get; set; }
 
         public string? GroqModel { get; set; }
 
