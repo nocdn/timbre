@@ -14,6 +14,8 @@ public sealed class AppSettings
 
     public HotkeyBinding PasteLastTranscriptHotkey { get; init; } = HotkeyBinding.PasteLastTranscriptDefault;
 
+    public HotkeyBinding OpenHistoryHotkey { get; init; } = HotkeyBinding.OpenHistoryDefault;
+
     public int TranscriptHistoryLimit { get; init; } = 20;
 
     public bool PushToTalk { get; init; } = true;

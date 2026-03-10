@@ -48,6 +48,12 @@ public sealed class HotkeyBinding : IEquatable<HotkeyBinding>
         KeyCode = 0x50,
     };
 
+    public static HotkeyBinding OpenHistoryDefault => new()
+    {
+        Shift = true,
+        KeyCode = 0x49,
+    };
+
     public bool Equals(HotkeyBinding? other)
     {
         if (ReferenceEquals(this, other))

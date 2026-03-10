@@ -55,10 +55,11 @@ public sealed class AppCoordinator
         _notificationService.AttachTrayIconService(_trayIconService);
 
         _keyboardHookService = new KeyboardHookService(_mainWindow.DispatcherQueue);
-        _keyboardHookService.UpdateHotkeys(_currentSettings.Hotkey, _currentSettings.PasteLastTranscriptHotkey);
+        _keyboardHookService.UpdateHotkeys(_currentSettings.Hotkey, _currentSettings.PasteLastTranscriptHotkey, _currentSettings.OpenHistoryHotkey);
         _keyboardHookService.RecordingHotkeyStarted += OnRecordingHotkeyStarted;
         _keyboardHookService.RecordingHotkeyEnded += OnRecordingHotkeyEnded;
         _keyboardHookService.PasteLastTranscriptHotkeyPressed += OnPasteLastTranscriptHotkeyPressed;
+        _keyboardHookService.OpenHistoryHotkeyPressed += OnOpenHistoryHotkeyPressed;
         _mainWindow.AttachKeyboardHookService(_keyboardHookService);
 
         await _mainViewModel.InitializeAsync();
@@ -117,10 +118,15 @@ public sealed class AppCoordinator
         await _dictationController.PasteLastTranscriptAsync(_currentSettings.PasteLastTranscriptHotkey);
     }
 
+    private async void OnOpenHistoryHotkeyPressed(object? sender, EventArgs e)
+    {
+        await _mainWindow.ShowHistoryWindowAsync();
+    }
+
     private async void OnSettingsSaved(AppSettings settings)
     {
         _currentSettings = settings;
-        _keyboardHookService?.UpdateHotkeys(settings.Hotkey, settings.PasteLastTranscriptHotkey);
+        _keyboardHookService?.UpdateHotkeys(settings.Hotkey, settings.PasteLastTranscriptHotkey, settings.OpenHistoryHotkey);
 
         try
         {
@@ -146,6 +152,7 @@ public sealed class AppCoordinator
             _keyboardHookService.RecordingHotkeyStarted -= OnRecordingHotkeyStarted;
             _keyboardHookService.RecordingHotkeyEnded -= OnRecordingHotkeyEnded;
             _keyboardHookService.PasteLastTranscriptHotkeyPressed -= OnPasteLastTranscriptHotkeyPressed;
+            _keyboardHookService.OpenHistoryHotkeyPressed -= OnOpenHistoryHotkeyPressed;
             _keyboardHookService.Dispose();
             _keyboardHookService = null;
         }

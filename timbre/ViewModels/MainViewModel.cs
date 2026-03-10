@@ -40,6 +40,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private string _fireworksLanguage = "en";
     private string _recordingHotkeyDisplay = HotkeyBinding.Default.ToDisplayString();
     private string _pasteLastTranscriptHotkeyDisplay = HotkeyBinding.PasteLastTranscriptDefault.ToDisplayString();
+    private string _openHistoryHotkeyDisplay = HotkeyBinding.OpenHistoryDefault.ToDisplayString();
     private string _statusMessage = string.Empty;
     private string _hotkeyWarningMessage = string.Empty;
     private bool _canCancelTranscription;
@@ -48,6 +49,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private bool _isInitialized;
     private HotkeyBinding _pendingHotkey = HotkeyBinding.Default;
     private HotkeyBinding _pendingPasteLastTranscriptHotkey = HotkeyBinding.PasteLastTranscriptDefault;
+    private HotkeyBinding _pendingOpenHistoryHotkey = HotkeyBinding.OpenHistoryDefault;
 
     public MainViewModel(
         IAppSettingsStore settingsStore,
@@ -179,6 +181,12 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         private set => SetProperty(ref _pasteLastTranscriptHotkeyDisplay, value);
     }
 
+    public string OpenHistoryHotkeyDisplay
+    {
+        get => _openHistoryHotkeyDisplay;
+        private set => SetProperty(ref _openHistoryHotkeyDisplay, value);
+    }
+
     public string StatusMessage
     {
         get => _statusMessage;
@@ -281,7 +289,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
     public async Task<bool> SaveSettingsAsync()
     {
-        var validation = HotkeyValidationService.Validate(_pendingHotkey, _pendingPasteLastTranscriptHotkey);
+        var validation = HotkeyValidationService.Validate(_pendingHotkey, _pendingPasteLastTranscriptHotkey, _pendingOpenHistoryHotkey);
         HotkeyWarningMessage = string.Join(" ", validation.Warnings);
 
         if (validation.HasErrors)
@@ -298,6 +306,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             FireworksApiKey = FireworksApiKey.Trim(),
             Hotkey = _pendingHotkey,
             PasteLastTranscriptHotkey = _pendingPasteLastTranscriptHotkey,
+            OpenHistoryHotkey = _pendingOpenHistoryHotkey,
             TranscriptHistoryLimit = TranscriptHistoryLimit,
             PushToTalk = PushToTalk,
             GroqModel = string.IsNullOrWhiteSpace(SelectedGroqModel) ? GroqModels[0] : SelectedGroqModel,
@@ -362,6 +371,14 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         StatusMessage = string.Empty;
     }
 
+    public void ApplyOpenHistoryHotkey(HotkeyBinding hotkey)
+    {
+        _pendingOpenHistoryHotkey = hotkey;
+        OpenHistoryHotkeyDisplay = hotkey.ToDisplayString();
+        RefreshHotkeyWarnings();
+        StatusMessage = string.Empty;
+    }
+
     public void Dispose()
     {
         _transcriptHistoryStore.HistoryChanged -= OnHistoryChanged;
@@ -382,8 +399,10 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         FireworksLanguage = NormalizeLanguage(settings.FireworksLanguage);
         _pendingHotkey = settings.Hotkey;
         _pendingPasteLastTranscriptHotkey = settings.PasteLastTranscriptHotkey;
+        _pendingOpenHistoryHotkey = settings.OpenHistoryHotkey;
         RecordingHotkeyDisplay = _pendingHotkey.ToDisplayString();
         PasteLastTranscriptHotkeyDisplay = _pendingPasteLastTranscriptHotkey.ToDisplayString();
+        OpenHistoryHotkeyDisplay = _pendingOpenHistoryHotkey.ToDisplayString();
         RefreshHotkeyWarnings();
     }
 
@@ -402,7 +421,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
     private void RefreshHotkeyWarnings()
     {
-        var validation = HotkeyValidationService.Validate(_pendingHotkey, _pendingPasteLastTranscriptHotkey);
+        var validation = HotkeyValidationService.Validate(_pendingHotkey, _pendingPasteLastTranscriptHotkey, _pendingOpenHistoryHotkey);
         HotkeyWarningMessage = string.Join(" ", validation.Warnings);
     }
 

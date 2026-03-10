@@ -10,14 +10,9 @@
 
     <Grid
         x:Name="RootGrid"
-        Padding="20,20,0,10"
-        RowSpacing="16">
-        <Grid.RowDefinitions>
-            <RowDefinition Height="*" />
-            <RowDefinition Height="Auto" />
-        </Grid.RowDefinitions>
+        Padding="20,20,0,10">
 
-        <ScrollViewer Grid.Row="0">
+        <ScrollViewer>
             <StackPanel
                 Margin="0,0,20,0"
                 Spacing="16">
@@ -213,46 +208,45 @@
                             Text="Open a separate window to search, review, copy, and delete saved transcripts."
                             TextWrapping="WrapWholeWords" />
 
-                        <Button
-                            x:Name="OpenHistoryButton"
-                            Click="OpenHistoryButton_Click"
-                            Content="Open history"
-                            HorizontalAlignment="Left" />
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <Button
+                                x:Name="OpenHistoryButton"
+                                Margin="0,0,0,10"
+                                Click="OpenHistoryButton_Click"
+                                Content="Open history"
+                                HorizontalAlignment="Left" />
+                            <Button
+                                x:Name="OpenHistoryHotkeyCaptureButton"
+                                Margin="0,0,0,10"
+                                Click="OpenHistoryHotkeyCaptureButton_Click" />
+                            <Button
+                                x:Name="ResetOpenHistoryHotkeyButton"
+                                Margin="0,0,0,10"
+                                Click="ResetOpenHistoryHotkeyButton_Click"
+                                Content="Reset to default" />
+                        </StackPanel>
                     </StackPanel>
                 </StackPanel>
             </StackPanel>
         </ScrollViewer>
 
-        <Grid
-            Grid.Row="1"
+        <TextBlock
+            x:Name="StatusTextBlock"
             Margin="0,0,20,15"
-            ColumnSpacing="12">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="*" />
-                <ColumnDefinition Width="Auto" />
-                <ColumnDefinition Width="Auto" />
-            </Grid.ColumnDefinitions>
+            MaxWidth="520"
+            HorizontalAlignment="Left"
+            VerticalAlignment="Bottom"
+            Foreground="{ThemeResource TextFillColorPrimaryBrush}"
+            TextWrapping="WrapWholeWords"
+            Visibility="Collapsed" />
 
-            <TextBlock
-                x:Name="StatusTextBlock"
-                VerticalAlignment="Center"
-                Foreground="{ThemeResource TextFillColorPrimaryBrush}"
-                TextWrapping="WrapWholeWords" />
-
-            <Button
-                x:Name="CancelTranscriptionButton"
-                Grid.Column="1"
-                VerticalAlignment="Center"
-                Click="CancelTranscriptionButton_Click"
-                Content="Cancel"
-                Visibility="Collapsed" />
-
-            <Button
-                x:Name="SaveButton"
-                Grid.Column="2"
-                VerticalAlignment="Center"
-                Click="SaveButton_Click"
-                Content="Save" />
-        </Grid>
+        <Button
+            x:Name="CancelTranscriptionButton"
+            Margin="0,0,20,15"
+            HorizontalAlignment="Right"
+            VerticalAlignment="Bottom"
+            Click="CancelTranscriptionButton_Click"
+            Content="Cancel"
+            Visibility="Collapsed" />
     </Grid>
 </Window>

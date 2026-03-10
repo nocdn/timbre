@@ -24,10 +24,12 @@ public sealed class KeyboardHookService : IDisposable
     private bool _rightWinDown;
     private bool _recordingComboActive;
     private bool _pasteLastTranscriptComboActive;
+    private bool _openHistoryComboActive;
     private bool _isCapturingHotkey;
     private Action<HotkeyBinding>? _hotkeyCapturedCallback;
     private HotkeyBinding _recordingHotkey = HotkeyBinding.Default;
     private HotkeyBinding _pasteLastTranscriptHotkey = HotkeyBinding.PasteLastTranscriptDefault;
+    private HotkeyBinding _openHistoryHotkey = HotkeyBinding.OpenHistoryDefault;
 
     public KeyboardHookService(DispatcherQueue dispatcherQueue)
     {
@@ -40,6 +42,8 @@ public sealed class KeyboardHookService : IDisposable
     public event EventHandler? RecordingHotkeyEnded;
 
     public event EventHandler? PasteLastTranscriptHotkeyPressed;
+
+    public event EventHandler? OpenHistoryHotkeyPressed;
 
     public void Start()
     {
@@ -67,12 +71,13 @@ public sealed class KeyboardHookService : IDisposable
         }
     }
 
-    public void UpdateHotkeys(HotkeyBinding recordingHotkey, HotkeyBinding pasteLastTranscriptHotkey)
+    public void UpdateHotkeys(HotkeyBinding recordingHotkey, HotkeyBinding pasteLastTranscriptHotkey, HotkeyBinding openHistoryHotkey)
     {
         _recordingHotkey = recordingHotkey ?? HotkeyBinding.Default;
         _pasteLastTranscriptHotkey = pasteLastTranscriptHotkey ?? HotkeyBinding.PasteLastTranscriptDefault;
+        _openHistoryHotkey = openHistoryHotkey ?? HotkeyBinding.OpenHistoryDefault;
         DiagnosticsLogger.Info(
-            $"Keyboard hotkeys updated. Recording='{_recordingHotkey.ToDisplayString()}', PasteLastTranscript='{_pasteLastTranscriptHotkey.ToDisplayString()}'.");
+            $"Keyboard hotkeys updated. Recording='{_recordingHotkey.ToDisplayString()}', PasteLastTranscript='{_pasteLastTranscriptHotkey.ToDisplayString()}', OpenHistory='{_openHistoryHotkey.ToDisplayString()}'.");
     }
 
     public void BeginHotkeyCapture(Action<HotkeyBinding> hotkeyCapturedCallback)
@@ -132,6 +137,7 @@ public sealed class KeyboardHookService : IDisposable
         var isModifierKey = IsModifierKey(virtualKeyCode);
         var matchesRecordingMainKey = virtualKeyCode == _recordingHotkey.KeyCode;
         var matchesPasteLastTranscriptMainKey = virtualKeyCode == _pasteLastTranscriptHotkey.KeyCode;
+        var matchesOpenHistoryMainKey = virtualKeyCode == _openHistoryHotkey.KeyCode;
 
         if (IsHotkeyPressed(_recordingHotkey) && !_recordingComboActive)
         {
@@ -145,18 +151,27 @@ public sealed class KeyboardHookService : IDisposable
             _dispatcherQueue.TryEnqueue(() => PasteLastTranscriptHotkeyPressed?.Invoke(this, EventArgs.Empty));
         }
 
+        if (IsHotkeyPressed(_openHistoryHotkey) && !_openHistoryComboActive)
+        {
+            _openHistoryComboActive = true;
+            _dispatcherQueue.TryEnqueue(() => OpenHistoryHotkeyPressed?.Invoke(this, EventArgs.Empty));
+        }
+
         return (matchesRecordingMainKey && ModifiersExactlyMatch(_recordingHotkey)) ||
                (matchesPasteLastTranscriptMainKey && ModifiersExactlyMatch(_pasteLastTranscriptHotkey)) ||
-               ((_recordingComboActive || _pasteLastTranscriptComboActive) && isModifierKey);
+               (matchesOpenHistoryMainKey && ModifiersExactlyMatch(_openHistoryHotkey)) ||
+               ((_recordingComboActive || _pasteLastTranscriptComboActive || _openHistoryComboActive) && isModifierKey);
     }
 
     private bool HandleKeyUp(uint virtualKeyCode)
     {
         var recordingComboWasActive = _recordingComboActive;
         var pasteLastTranscriptComboWasActive = _pasteLastTranscriptComboActive;
+        var openHistoryComboWasActive = _openHistoryComboActive;
         var isModifierKey = IsModifierKey(virtualKeyCode);
         var matchesRecordingMainKey = virtualKeyCode == _recordingHotkey.KeyCode;
         var matchesPasteLastTranscriptMainKey = virtualKeyCode == _pasteLastTranscriptHotkey.KeyCode;
+        var matchesOpenHistoryMainKey = virtualKeyCode == _openHistoryHotkey.KeyCode;
 
         SetModifierState(virtualKeyCode, false);
         _pressedKeys.Remove(virtualKeyCode);
@@ -172,6 +187,11 @@ public sealed class KeyboardHookService : IDisposable
             _pasteLastTranscriptComboActive = false;
         }
 
+        if (openHistoryComboWasActive && virtualKeyCode == _openHistoryHotkey.KeyCode)
+        {
+            _openHistoryComboActive = false;
+        }
+
         if (_isCapturingHotkey)
         {
             return isModifierKey;
@@ -179,7 +199,8 @@ public sealed class KeyboardHookService : IDisposable
 
         return matchesRecordingMainKey ||
                matchesPasteLastTranscriptMainKey ||
-               ((recordingComboWasActive || pasteLastTranscriptComboWasActive) && isModifierKey);
+               matchesOpenHistoryMainKey ||
+               ((recordingComboWasActive || pasteLastTranscriptComboWasActive || openHistoryComboWasActive) && isModifierKey);
     }
 
     private bool HandleHotkeyCaptureKeyDown(uint virtualKeyCode)
