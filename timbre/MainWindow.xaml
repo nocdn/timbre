@@ -216,6 +216,22 @@
 
                 <StackPanel Spacing="12">
                     <TextBlock
+                        Text="Feedback"
+                        Style="{ThemeResource SubtitleTextBlockStyle}" />
+                    <StackPanel Spacing="6">
+                        <ToggleSwitch
+                            x:Name="SoundFeedbackToggle"
+                            Header="Play sound when recording starts"
+                            Toggled="SoundFeedbackToggle_Toggled" />
+                        <TextBlock
+                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                            Text="Plays a short confirmation sound when a dictation recording begins."
+                            TextWrapping="WrapWholeWords" />
+                    </StackPanel>
+                </StackPanel>
+
+                <StackPanel Spacing="12">
+                    <TextBlock
                         Text="Transcript history"
                         Style="{ThemeResource SubtitleTextBlockStyle}" />
                     <StackPanel Spacing="12">

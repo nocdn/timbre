@@ -52,6 +52,7 @@ public static class Program
         services.AddSingleton<INotificationService, NotificationService>();
         services.AddSingleton<IClipboardPasteService, ClipboardPasteService>();
         services.AddSingleton<ILaunchAtStartupService, LaunchAtStartupService>();
+        services.AddSingleton<IAudioFeedbackService, AudioFeedbackService>();
         services.AddSingleton<GroqTranscriptionClient>(_ =>
         {
             var httpClient = new HttpClient

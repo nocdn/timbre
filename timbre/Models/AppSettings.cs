@@ -22,6 +22,8 @@ public sealed class AppSettings
 
     public bool LaunchAtStartup { get; init; }
 
+    public bool SoundFeedbackEnabled { get; init; } = true;
+
     public string GroqModel { get; init; } = "whisper-large-v3-turbo";
 
     public string GroqLanguage { get; init; } = "en";

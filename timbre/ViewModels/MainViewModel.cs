@@ -34,6 +34,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private string _fireworksApiKey = string.Empty;
     private bool _pushToTalk = true;
     private bool _launchAtStartup;
+    private bool _soundFeedbackEnabled = true;
     private int _transcriptHistoryLimit = 200;
     private double _transcriptHistoryLimitValue = 200;
     private string _selectedGroqModel = GroqModels[0];
@@ -135,6 +136,12 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     {
         get => _launchAtStartup;
         set => SetProperty(ref _launchAtStartup, value);
+    }
+
+    public bool SoundFeedbackEnabled
+    {
+        get => _soundFeedbackEnabled;
+        set => SetProperty(ref _soundFeedbackEnabled, value);
     }
 
     public int TranscriptHistoryLimit
@@ -323,6 +330,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             TranscriptHistoryLimit = TranscriptHistoryLimit,
             PushToTalk = PushToTalk,
             LaunchAtStartup = LaunchAtStartup,
+            SoundFeedbackEnabled = SoundFeedbackEnabled,
             GroqModel = string.IsNullOrWhiteSpace(SelectedGroqModel) ? GroqModels[0] : SelectedGroqModel,
             GroqLanguage = NormalizeLanguage(GroqLanguage),
             FireworksModel = string.IsNullOrWhiteSpace(SelectedFireworksModel) ? FireworksModels[0] : SelectedFireworksModel,
@@ -406,6 +414,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         FireworksApiKey = settings.FireworksApiKey ?? string.Empty;
         PushToTalk = settings.PushToTalk;
         LaunchAtStartup = settings.LaunchAtStartup;
+        SoundFeedbackEnabled = settings.SoundFeedbackEnabled;
         TranscriptHistoryLimit = settings.TranscriptHistoryLimit;
         TranscriptHistoryLimitValue = settings.TranscriptHistoryLimit;
         SelectedGroqModel = GroqModels.FirstOrDefault(model => model == settings.GroqModel) ?? GroqModels[0];

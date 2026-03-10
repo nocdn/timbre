@@ -13,6 +13,7 @@ public sealed class AppCoordinator
     private readonly ITranscriptHistoryStore _transcriptHistoryStore;
     private readonly INotificationService _notificationService;
     private readonly IDictationController _dictationController;
+    private readonly IAudioFeedbackService _audioFeedbackService;
 
     private KeyboardHookService? _keyboardHookService;
     private TrayIconService? _trayIconService;
@@ -27,7 +28,8 @@ public sealed class AppCoordinator
         IAppSettingsStore settingsStore,
         ITranscriptHistoryStore transcriptHistoryStore,
         INotificationService notificationService,
-        IDictationController dictationController)
+        IDictationController dictationController,
+        IAudioFeedbackService audioFeedbackService)
     {
         _mainWindow = mainWindow;
         _mainViewModel = mainViewModel;
@@ -36,6 +38,7 @@ public sealed class AppCoordinator
         _transcriptHistoryStore = transcriptHistoryStore;
         _notificationService = notificationService;
         _dictationController = dictationController;
+        _audioFeedbackService = audioFeedbackService;
         Current = this;
     }
 
@@ -93,7 +96,11 @@ public sealed class AppCoordinator
     {
         if (_currentSettings.PushToTalk)
         {
-            await _dictationController.StartDictationAsync();
+            if (await _dictationController.StartDictationAsync())
+            {
+                PlayRecordingStartedFeedback();
+            }
+
             return;
         }
 
@@ -104,6 +111,7 @@ public sealed class AppCoordinator
         }
         else if (await _dictationController.StartDictationAsync())
         {
+            PlayRecordingStartedFeedback();
             _toggleRecordingActive = true;
         }
     }
@@ -164,8 +172,26 @@ public sealed class AppCoordinator
 
         _mainWindow.SettingsSaved -= OnSettingsSaved;
         _dictationController.Dispose();
+        _audioFeedbackService.Dispose();
         _trayIconService?.Dispose();
         _mainWindow.EnableClose();
         _mainWindow.Close();
+    }
+
+    private void PlayRecordingStartedFeedback()
+    {
+        if (!_currentSettings.SoundFeedbackEnabled)
+        {
+            return;
+        }
+
+        try
+        {
+            _audioFeedbackService.PlayRecordingStarted();
+        }
+        catch (Exception exception)
+        {
+            DiagnosticsLogger.Error("Recording feedback sound failed.", exception);
+        }
     }
 }
