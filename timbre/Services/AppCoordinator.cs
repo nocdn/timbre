@@ -65,6 +65,7 @@ public sealed class AppCoordinator
         _mainWindow.AttachKeyboardHookService(_keyboardHookService);
 
         await _mainViewModel.InitializeAsync();
+        _audioFeedbackService.WarmUp();
 
         try
         {

@@ -10,6 +10,8 @@ public sealed class AppSettings
 
     public string? FireworksApiKey { get; init; }
 
+    public string? DeepgramApiKey { get; init; }
+
     public HotkeyBinding Hotkey { get; init; } = HotkeyBinding.Default;
 
     public HotkeyBinding PasteLastTranscriptHotkey { get; init; } = HotkeyBinding.PasteLastTranscriptDefault;
@@ -31,6 +33,12 @@ public sealed class AppSettings
     public string FireworksModel { get; init; } = "whisper-v3-turbo";
 
     public string FireworksLanguage { get; init; } = "en";
+
+    public string DeepgramModel { get; init; } = "flux";
+
+    public string DeepgramLanguage { get; init; } = "en";
+
+    public bool DeepgramStreamingEnabled { get; init; } = true;
 
     public bool HasCompletedInitialSetup { get; init; }
 }

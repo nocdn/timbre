@@ -11,6 +11,15 @@ public sealed class AudioFeedbackService : IAudioFeedbackService
     private AudioFileReader? _audioFile;
     private bool _isDisposed;
 
+    public void WarmUp()
+    {
+        lock (_syncRoot)
+        {
+            ThrowIfDisposed();
+            EnsureInitialized();
+        }
+    }
+
     public void PlayRecordingStarted()
     {
         lock (_syncRoot)

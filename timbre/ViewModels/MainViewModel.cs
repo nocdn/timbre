@@ -19,6 +19,14 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         "whisper-v3-turbo",
         "whisper-v3",
     ];
+    private static readonly string[] DeepgramStreamingModels =
+    [
+        "flux",
+    ];
+    private static readonly string[] DeepgramBatchModels =
+    [
+        "nova-3",
+    ];
 
     private readonly IAppSettingsStore _settingsStore;
     private readonly IAudioDeviceService _audioDeviceService;
@@ -32,6 +40,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private TranscriptionProvider _selectedProvider = TranscriptionProvider.Groq;
     private string _groqApiKey = string.Empty;
     private string _fireworksApiKey = string.Empty;
+    private string _deepgramApiKey = string.Empty;
+    private bool _deepgramStreamingEnabled = true;
     private bool _pushToTalk = true;
     private bool _launchAtStartup;
     private bool _soundFeedbackEnabled = true;
@@ -41,6 +51,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private string _selectedFireworksModel = FireworksModels[0];
     private string _groqLanguage = "en";
     private string _fireworksLanguage = "en";
+    private string _selectedDeepgramModel = DeepgramStreamingModels[0];
     private string _recordingHotkeyDisplay = HotkeyBinding.Default.ToDisplayString();
     private string _pasteLastTranscriptHotkeyDisplay = HotkeyBinding.PasteLastTranscriptDefault.ToDisplayString();
     private string _openHistoryHotkeyDisplay = HotkeyBinding.OpenHistoryDefault.ToDisplayString();
@@ -85,6 +96,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
     public IReadOnlyList<string> AvailableFireworksModels => FireworksModels;
 
+    public IReadOnlyList<string> AvailableDeepgramModels => DeepgramStreamingEnabled ? DeepgramStreamingModels : DeepgramBatchModels;
+
     public TranscriptionProvider SelectedProvider
     {
         get => _selectedProvider;
@@ -94,8 +107,10 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             {
                 OnPropertyChanged(nameof(IsGroqSelected));
                 OnPropertyChanged(nameof(IsFireworksSelected));
+                OnPropertyChanged(nameof(IsDeepgramSelected));
                 OnPropertyChanged(nameof(GroqSettingsVisibility));
                 OnPropertyChanged(nameof(FireworksSettingsVisibility));
+                OnPropertyChanged(nameof(DeepgramSettingsVisibility));
             }
         }
     }
@@ -104,9 +119,13 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
     public bool IsFireworksSelected => SelectedProvider == TranscriptionProvider.Fireworks;
 
+    public bool IsDeepgramSelected => SelectedProvider == TranscriptionProvider.Deepgram;
+
     public Visibility GroqSettingsVisibility => IsGroqSelected ? Visibility.Visible : Visibility.Collapsed;
 
     public Visibility FireworksSettingsVisibility => IsFireworksSelected ? Visibility.Visible : Visibility.Collapsed;
+
+    public Visibility DeepgramSettingsVisibility => IsDeepgramSelected ? Visibility.Visible : Visibility.Collapsed;
 
     public AudioInputDevice? SelectedInputDevice
     {
@@ -124,6 +143,30 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     {
         get => _fireworksApiKey;
         set => SetProperty(ref _fireworksApiKey, value);
+    }
+
+    public string DeepgramApiKey
+    {
+        get => _deepgramApiKey;
+        set => SetProperty(ref _deepgramApiKey, value);
+    }
+
+    public bool DeepgramStreamingEnabled
+    {
+        get => _deepgramStreamingEnabled;
+        set
+        {
+            if (SetProperty(ref _deepgramStreamingEnabled, value))
+            {
+                OnPropertyChanged(nameof(AvailableDeepgramModels));
+
+                var defaultModel = GetDefaultDeepgramModel(value);
+                if (!AvailableDeepgramModels.Any(model => string.Equals(model, SelectedDeepgramModel, StringComparison.Ordinal)))
+                {
+                    SelectedDeepgramModel = defaultModel;
+                }
+            }
+        }
     }
 
     public bool PushToTalk
@@ -184,6 +227,12 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     {
         get => _fireworksLanguage;
         set => SetProperty(ref _fireworksLanguage, value);
+    }
+
+    public string SelectedDeepgramModel
+    {
+        get => _selectedDeepgramModel;
+        set => SetProperty(ref _selectedDeepgramModel, value);
     }
 
     public string RecordingHotkeyDisplay
@@ -316,27 +365,21 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             return false;
         }
 
-        _launchAtStartupService.SetEnabled(LaunchAtStartup);
+        var settings = CreateSettingsSnapshot();
+        var currentSettings = _settingsStore.CurrentSettings;
+        var settingsChanged = !AreSettingsEquivalent(currentSettings, settings);
+        var shouldUpdateLaunchAtStartup = currentSettings.LaunchAtStartup != settings.LaunchAtStartup;
 
-        var settings = new AppSettings
+        if (shouldUpdateLaunchAtStartup)
         {
-            SelectedInputDeviceId = SelectedInputDevice?.Id,
-            Provider = SelectedProvider,
-            GroqApiKey = GroqApiKey.Trim(),
-            FireworksApiKey = FireworksApiKey.Trim(),
-            Hotkey = _pendingHotkey,
-            PasteLastTranscriptHotkey = _pendingPasteLastTranscriptHotkey,
-            OpenHistoryHotkey = _pendingOpenHistoryHotkey,
-            TranscriptHistoryLimit = TranscriptHistoryLimit,
-            PushToTalk = PushToTalk,
-            LaunchAtStartup = LaunchAtStartup,
-            SoundFeedbackEnabled = SoundFeedbackEnabled,
-            GroqModel = string.IsNullOrWhiteSpace(SelectedGroqModel) ? GroqModels[0] : SelectedGroqModel,
-            GroqLanguage = NormalizeLanguage(GroqLanguage),
-            FireworksModel = string.IsNullOrWhiteSpace(SelectedFireworksModel) ? FireworksModels[0] : SelectedFireworksModel,
-            FireworksLanguage = NormalizeLanguage(FireworksLanguage),
-            HasCompletedInitialSetup = true,
-        };
+            _launchAtStartupService.SetEnabled(LaunchAtStartup);
+        }
+
+        if (!settingsChanged)
+        {
+            StatusMessage = string.Empty;
+            return true;
+        }
 
         await _settingsStore.SaveAsync(settings);
         SettingsSaved?.Invoke(settings);
@@ -412,6 +455,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         SelectedProvider = settings.Provider;
         GroqApiKey = settings.GroqApiKey ?? string.Empty;
         FireworksApiKey = settings.FireworksApiKey ?? string.Empty;
+        DeepgramApiKey = settings.DeepgramApiKey ?? string.Empty;
+        DeepgramStreamingEnabled = settings.DeepgramStreamingEnabled;
         PushToTalk = settings.PushToTalk;
         LaunchAtStartup = settings.LaunchAtStartup;
         SoundFeedbackEnabled = settings.SoundFeedbackEnabled;
@@ -421,6 +466,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         GroqLanguage = NormalizeLanguage(settings.GroqLanguage);
         SelectedFireworksModel = FireworksModels.FirstOrDefault(model => model == settings.FireworksModel) ?? FireworksModels[0];
         FireworksLanguage = NormalizeLanguage(settings.FireworksLanguage);
+        SelectedDeepgramModel = AvailableDeepgramModels.FirstOrDefault(model => model == settings.DeepgramModel) ?? GetDefaultDeepgramModel(settings.DeepgramStreamingEnabled);
         _pendingHotkey = settings.Hotkey;
         _pendingPasteLastTranscriptHotkey = settings.PasteLastTranscriptHotkey;
         _pendingOpenHistoryHotkey = settings.OpenHistoryHotkey;
@@ -428,6 +474,33 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         PasteLastTranscriptHotkeyDisplay = _pendingPasteLastTranscriptHotkey.ToDisplayString();
         OpenHistoryHotkeyDisplay = _pendingOpenHistoryHotkey.ToDisplayString();
         RefreshHotkeyWarnings();
+    }
+
+    private AppSettings CreateSettingsSnapshot()
+    {
+        return new AppSettings
+        {
+            SelectedInputDeviceId = SelectedInputDevice?.Id,
+            Provider = SelectedProvider,
+            GroqApiKey = GroqApiKey.Trim(),
+            FireworksApiKey = FireworksApiKey.Trim(),
+            DeepgramApiKey = DeepgramApiKey.Trim(),
+            Hotkey = _pendingHotkey,
+            PasteLastTranscriptHotkey = _pendingPasteLastTranscriptHotkey,
+            OpenHistoryHotkey = _pendingOpenHistoryHotkey,
+            TranscriptHistoryLimit = TranscriptHistoryLimit,
+            PushToTalk = PushToTalk,
+            LaunchAtStartup = LaunchAtStartup,
+            SoundFeedbackEnabled = SoundFeedbackEnabled,
+            GroqModel = string.IsNullOrWhiteSpace(SelectedGroqModel) ? GroqModels[0] : SelectedGroqModel,
+            GroqLanguage = NormalizeLanguage(GroqLanguage),
+            FireworksModel = string.IsNullOrWhiteSpace(SelectedFireworksModel) ? FireworksModels[0] : SelectedFireworksModel,
+            FireworksLanguage = NormalizeLanguage(FireworksLanguage),
+            DeepgramModel = string.IsNullOrWhiteSpace(SelectedDeepgramModel) ? GetDefaultDeepgramModel(DeepgramStreamingEnabled) : SelectedDeepgramModel,
+            DeepgramLanguage = "en",
+            DeepgramStreamingEnabled = DeepgramStreamingEnabled,
+            HasCompletedInitialSetup = true,
+        };
     }
 
     private async Task LoadHistoryAsync()
@@ -513,5 +586,34 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
         var normalized = value.Trim().ToLowerInvariant();
         return normalized == "auto" ? "auto" : normalized;
+    }
+
+    private static bool AreSettingsEquivalent(AppSettings left, AppSettings right)
+    {
+        return string.Equals(left.SelectedInputDeviceId, right.SelectedInputDeviceId, StringComparison.Ordinal) &&
+               left.Provider == right.Provider &&
+               string.Equals(left.GroqApiKey, right.GroqApiKey, StringComparison.Ordinal) &&
+               string.Equals(left.FireworksApiKey, right.FireworksApiKey, StringComparison.Ordinal) &&
+               string.Equals(left.DeepgramApiKey, right.DeepgramApiKey, StringComparison.Ordinal) &&
+               Equals(left.Hotkey, right.Hotkey) &&
+               Equals(left.PasteLastTranscriptHotkey, right.PasteLastTranscriptHotkey) &&
+               Equals(left.OpenHistoryHotkey, right.OpenHistoryHotkey) &&
+               left.TranscriptHistoryLimit == right.TranscriptHistoryLimit &&
+               left.PushToTalk == right.PushToTalk &&
+               left.LaunchAtStartup == right.LaunchAtStartup &&
+               left.SoundFeedbackEnabled == right.SoundFeedbackEnabled &&
+               string.Equals(left.GroqModel, right.GroqModel, StringComparison.Ordinal) &&
+               string.Equals(left.GroqLanguage, right.GroqLanguage, StringComparison.Ordinal) &&
+               string.Equals(left.FireworksModel, right.FireworksModel, StringComparison.Ordinal) &&
+               string.Equals(left.FireworksLanguage, right.FireworksLanguage, StringComparison.Ordinal) &&
+               string.Equals(left.DeepgramModel, right.DeepgramModel, StringComparison.Ordinal) &&
+               string.Equals(left.DeepgramLanguage, right.DeepgramLanguage, StringComparison.Ordinal) &&
+               left.DeepgramStreamingEnabled == right.DeepgramStreamingEnabled &&
+               left.HasCompletedInitialSetup == right.HasCompletedInitialSetup;
+    }
+
+    private static string GetDefaultDeepgramModel(bool streamingEnabled)
+    {
+        return streamingEnabled ? DeepgramStreamingModels[0] : DeepgramBatchModels[0];
     }
 }

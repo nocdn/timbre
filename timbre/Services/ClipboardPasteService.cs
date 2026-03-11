@@ -25,10 +25,7 @@ public sealed class ClipboardPasteService : IClipboardPasteService
 
         return RunOnUiThreadAsync(() =>
         {
-            cancellationToken.ThrowIfCancellationRequested();
-            SetClipboardText(text);
-            DiagnosticsLogger.Info($"Clipboard text copied successfully. TextLength={text.Length}.");
-            return Task.CompletedTask;
+            return CopyTextOnUiThreadAsync(text, cancellationToken);
         });
     }
 
@@ -43,7 +40,7 @@ public sealed class ClipboardPasteService : IClipboardPasteService
         {
             cancellationToken.ThrowIfCancellationRequested();
             DiagnosticsLogger.Info($"PasteTextAsync entered. TextLength={text.Length}.");
-            SetClipboardText(text);
+            await SetClipboardTextAsync(text, cancellationToken);
             DiagnosticsLogger.Info("Clipboard text set successfully.");
 
             if (triggeringHotkey is not null)
@@ -95,13 +92,21 @@ public sealed class ClipboardPasteService : IClipboardPasteService
         return completionSource.Task;
     }
 
-    private static void SetClipboardText(string text)
+    private static async Task CopyTextOnUiThreadAsync(string text, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        await SetClipboardTextAsync(text, cancellationToken);
+        DiagnosticsLogger.Info($"Clipboard text copied successfully. TextLength={text.Length}.");
+    }
+
+    private static async Task SetClipboardTextAsync(string text, CancellationToken cancellationToken)
     {
         var lastError = 0;
         var bytes = Encoding.Unicode.GetBytes(text + '\0');
 
         for (var attempt = 1; attempt <= 10; attempt++)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             IntPtr clipboardMemory = IntPtr.Zero;
             var clipboardOpened = false;
 
@@ -113,7 +118,7 @@ public sealed class ClipboardPasteService : IClipboardPasteService
                 {
                     lastError = Marshal.GetLastWin32Error();
                     DiagnosticsLogger.Info($"OpenClipboard attempt {attempt} failed with Win32 error {lastError}.");
-                    Thread.Sleep(40);
+                    await Task.Delay(40, cancellationToken);
                     continue;
                 }
 

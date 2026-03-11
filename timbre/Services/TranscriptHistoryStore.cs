@@ -15,6 +15,8 @@ public sealed class TranscriptHistoryStore : ITranscriptHistoryStore
 
     private readonly SemaphoreSlim _stateLock = new(1, 1);
     private readonly string _historyPath;
+    private List<TranscriptHistoryEntry> _entries = [];
+    private bool _hasLoadedEntries;
 
     public event EventHandler? HistoryChanged;
 
@@ -39,13 +41,13 @@ public sealed class TranscriptHistoryStore : ITranscriptHistoryStore
 
         try
         {
-            var entries = await LoadEntriesAsync(cancellationToken);
+            var entries = await GetMutableEntriesAsync(cancellationToken);
 
             if (maxEntries <= 0)
             {
                 if (entries.Count > 0)
                 {
-                    entries.Clear();
+                    entries = [];
                     hasChanged = true;
                 }
             }
@@ -63,6 +65,7 @@ public sealed class TranscriptHistoryStore : ITranscriptHistoryStore
 
             if (hasChanged)
             {
+                _entries = entries;
                 await SaveEntriesAsync(entries, cancellationToken);
             }
 
@@ -85,7 +88,7 @@ public sealed class TranscriptHistoryStore : ITranscriptHistoryStore
 
         try
         {
-            var entries = await LoadEntriesAsync(cancellationToken);
+            var entries = await GetMutableEntriesAsync(cancellationToken);
             return entries
                 .OrderByDescending(entry => entry.CreatedAtUtc)
                 .ToList();
@@ -102,7 +105,7 @@ public sealed class TranscriptHistoryStore : ITranscriptHistoryStore
 
         try
         {
-            var entries = await LoadEntriesAsync(cancellationToken);
+            var entries = await GetMutableEntriesAsync(cancellationToken);
             return entries.LastOrDefault()?.Text;
         }
         finally
@@ -123,7 +126,7 @@ public sealed class TranscriptHistoryStore : ITranscriptHistoryStore
 
         try
         {
-            var entries = await LoadEntriesAsync(cancellationToken);
+            var entries = await GetMutableEntriesAsync(cancellationToken);
             hasChanged = entries.RemoveAll(entry => string.Equals(entry.Id, entryId, StringComparison.Ordinal)) > 0;
 
             if (hasChanged)
@@ -150,12 +153,13 @@ public sealed class TranscriptHistoryStore : ITranscriptHistoryStore
 
         try
         {
-            var entries = await LoadEntriesAsync(cancellationToken);
+            var entries = await GetMutableEntriesAsync(cancellationToken);
             hasChanged = entries.Count > 0;
 
             if (hasChanged)
             {
-                await SaveEntriesAsync([], cancellationToken);
+                _entries = [];
+                await SaveEntriesAsync(_entries, cancellationToken);
                 DiagnosticsLogger.Info("Transcript history cleared.");
             }
         }
@@ -177,11 +181,12 @@ public sealed class TranscriptHistoryStore : ITranscriptHistoryStore
 
         try
         {
-            var entries = await LoadEntriesAsync(cancellationToken);
+            var entries = await GetMutableEntriesAsync(cancellationToken);
             var trimmedEntries = maxEntries <= 0 ? [] : TrimEntries(entries, maxEntries);
 
             if (trimmedEntries.Count != entries.Count)
             {
+                _entries = trimmedEntries;
                 await SaveEntriesAsync(trimmedEntries, cancellationToken);
                 hasChanged = true;
                 DiagnosticsLogger.Info($"Transcript history retention enforced. EntryCount={trimmedEntries.Count}, MaxEntries={Math.Max(maxEntries, 0)}.");
@@ -198,21 +203,30 @@ public sealed class TranscriptHistoryStore : ITranscriptHistoryStore
         }
     }
 
-    private async Task<List<TranscriptHistoryEntry>> LoadEntriesAsync(CancellationToken cancellationToken)
+    private async Task<List<TranscriptHistoryEntry>> GetMutableEntriesAsync(CancellationToken cancellationToken)
     {
+        if (_hasLoadedEntries)
+        {
+            return _entries;
+        }
+
         if (!File.Exists(_historyPath))
         {
-            return [];
+            _entries = [];
+            _hasLoadedEntries = true;
+            return _entries;
         }
 
         var json = await File.ReadAllTextAsync(_historyPath, cancellationToken);
 
         if (string.IsNullOrWhiteSpace(json))
         {
-            return [];
+            _entries = [];
+            _hasLoadedEntries = true;
+            return _entries;
         }
 
-        return (JsonSerializer.Deserialize<List<TranscriptHistoryEntry>>(json, _serializerOptions) ?? [])
+        _entries = (JsonSerializer.Deserialize<List<TranscriptHistoryEntry>>(json, _serializerOptions) ?? [])
             .Select(entry => new TranscriptHistoryEntry
             {
                 Id = string.IsNullOrWhiteSpace(entry.Id) ? Guid.NewGuid().ToString("N") : entry.Id,
@@ -220,10 +234,13 @@ public sealed class TranscriptHistoryStore : ITranscriptHistoryStore
                 Text = entry.Text,
             })
             .ToList();
+        _hasLoadedEntries = true;
+        return _entries;
     }
 
     private async Task SaveEntriesAsync(List<TranscriptHistoryEntry> entries, CancellationToken cancellationToken)
     {
+        _entries = entries;
         var json = JsonSerializer.Serialize(entries, _serializerOptions);
         await File.WriteAllTextAsync(_historyPath, json, cancellationToken);
     }

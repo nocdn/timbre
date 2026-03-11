@@ -129,6 +129,11 @@
                                     Checked="ProviderRadioButton_Checked"
                                     Content="Fireworks"
                                     GroupName="ProviderGroup" />
+                                <RadioButton
+                                    x:Name="DeepgramProviderRadioButton"
+                                    Checked="ProviderRadioButton_Checked"
+                                    Content="Deepgram"
+                                    GroupName="ProviderGroup" />
                             </StackPanel>
                         </StackPanel>
                     </StackPanel>
@@ -195,6 +200,36 @@
                                 Text="Use an ISO-639-1 code like 'en'. Use 'auto' to let Fireworks detect it. Docs: https://docs.fireworks.ai/api-reference/audio-transcriptions#language-code-and-name"
                                 TextWrapping="WrapWholeWords" />
                         </StackPanel>
+                    </StackPanel>
+                </StackPanel>
+
+                <StackPanel
+                    x:Name="DeepgramSettingsPanel"
+                    Spacing="14">
+                    <TextBlock
+                        Text="Deepgram settings"
+                        Style="{ThemeResource SubtitleTextBlockStyle}" />
+                    <StackPanel Spacing="14">
+                        <PasswordBox
+                            x:Name="DeepgramApiKeyBox"
+                            PasswordChanged="SettingsPasswordBox_PasswordChanged"
+                            Header="Deepgram API key" />
+
+                        <ToggleSwitch
+                            x:Name="DeepgramStreamingToggle"
+                            Header="Streaming"
+                            Toggled="DeepgramStreamingToggle_Toggled" />
+
+                        <ComboBox
+                            x:Name="DeepgramModelComboBox"
+                            SelectionChanged="SettingsComboBox_SelectionChanged"
+                            Header="Deepgram model"
+                            PlaceholderText="Select a Deepgram model" />
+
+                        <TextBlock
+                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                            Text="When streaming is on, Timbre uses Flux and pastes transcript chunks while you dictate. When streaming is off, Timbre uses Nova-3 and pastes the final transcript after recording stops. Language is fixed to English for now. Docs: https://developers.deepgram.com/reference/speech-to-text/listen-streaming and https://developers.deepgram.com/docs/pre-recorded-audio"
+                            TextWrapping="WrapWholeWords" />
                     </StackPanel>
                 </StackPanel>
 

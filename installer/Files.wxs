@@ -7,7 +7,12 @@
       -->
       <Files Include="$(AppPayloadDir)\**">
         <Exclude Files="$(AppPayloadDir)\**\*.pdb" />
+        <Exclude Files="$(AppPayloadDir)\timbre.exe" />
       </Files>
+
+      <Component Id="TimbreExecutableComponent" Guid="*">
+        <File Id="TimbreExecutableFile" Source="$(AppPayloadDir)\timbre.exe" KeyPath="yes" />
+      </Component>
     </ComponentGroup>
   </Fragment>
 </Wix>

@@ -2,16 +2,24 @@
 using NAudio.Utils;
 using NAudio.Wave;
 using NAudio.Wave.SampleProviders;
+using timbre.Models;
 
 namespace timbre.Services;
 
 public sealed class AudioRecorder : IDisposable
 {
+    private const int StreamingChunkSizeBytes = 2560;
+
     private WasapiCapture? _capture;
     private MMDevice? _device;
-    private MemoryStream? _recordedStream;
-    private WaveFileWriter? _waveWriter;
+    private MemoryStream? _convertedStream;
+    private WaveFileWriter? _convertedWriter;
+    private BufferedWaveProvider? _bufferedWaveProvider;
+    private ISampleProvider? _resampledProvider;
+    private MemoryStream? _streamingChunkBuffer;
     private TaskCompletionSource<byte[]>? _stopCompletionSource;
+
+    public event EventHandler<AudioChunkAvailableEventArgs>? ChunkAvailable;
 
     public bool IsRecording { get; private set; }
 
@@ -42,8 +50,15 @@ public sealed class AudioRecorder : IDisposable
         LastCompletedDeviceName = null;
         LastCompletedWaveFormatDescription = null;
         LastCompletedBytesCaptured = 0;
-        _recordedStream = new MemoryStream();
-        _waveWriter = new WaveFileWriter(new IgnoreDisposeStream(_recordedStream), _capture.WaveFormat);
+        _convertedStream = new MemoryStream();
+        _convertedWriter = new WaveFileWriter(new IgnoreDisposeStream(_convertedStream), new WaveFormat(16000, 16, 1));
+        _bufferedWaveProvider = new BufferedWaveProvider(_capture.WaveFormat)
+        {
+            DiscardOnBufferOverflow = false,
+            ReadFully = false,
+        };
+        _resampledProvider = CreateResampledProvider(_bufferedWaveProvider);
+        _streamingChunkBuffer = new MemoryStream();
         _stopCompletionSource = new TaskCompletionSource<byte[]>(TaskCreationOptions.RunContinuationsAsynchronously);
 
         _capture.DataAvailable += OnDataAvailable;
@@ -73,8 +88,14 @@ public sealed class AudioRecorder : IDisposable
     private void OnDataAvailable(object? sender, WaveInEventArgs eventArgs)
     {
         BytesCaptured += eventArgs.BytesRecorded;
-        _waveWriter?.Write(eventArgs.Buffer, 0, eventArgs.BytesRecorded);
-        _waveWriter?.Flush();
+
+        if (_bufferedWaveProvider is null || _resampledProvider is null || _convertedWriter is null)
+        {
+            return;
+        }
+
+        _bufferedWaveProvider.AddSamples(eventArgs.Buffer, 0, eventArgs.BytesRecorded);
+        PublishConvertedAudioChunks(_resampledProvider, _convertedWriter);
     }
 
     private void OnRecordingStopped(object? sender, StoppedEventArgs eventArgs)
@@ -83,13 +104,18 @@ public sealed class AudioRecorder : IDisposable
 
         try
         {
-            _waveWriter?.Flush();
-            _waveWriter?.Dispose();
+            if (_resampledProvider is not null && _convertedWriter is not null)
+            {
+                PublishConvertedAudioChunks(_resampledProvider, _convertedWriter);
+                FlushStreamingChunkBuffer();
+                _convertedWriter.Flush();
+                _convertedWriter.Dispose();
+            }
 
             LastCompletedDeviceName = DeviceName;
             LastCompletedWaveFormatDescription = WaveFormatDescription;
             LastCompletedBytesCaptured = BytesCaptured;
-            var audioBytes = DownsampleTo16KhzMono(_recordedStream?.ToArray() ?? []);
+            var audioBytes = _convertedStream?.ToArray() ?? [];
             Cleanup();
 
             if (eventArgs.Exception is not null)
@@ -117,11 +143,17 @@ public sealed class AudioRecorder : IDisposable
             _capture = null;
         }
 
-        _waveWriter?.Dispose();
-        _waveWriter = null;
+        _convertedWriter?.Dispose();
+        _convertedWriter = null;
 
-        _recordedStream?.Dispose();
-        _recordedStream = null;
+        _convertedStream?.Dispose();
+        _convertedStream = null;
+
+        _bufferedWaveProvider = null;
+        _resampledProvider = null;
+
+        _streamingChunkBuffer?.Dispose();
+        _streamingChunkBuffer = null;
 
         _device?.Dispose();
         _device = null;
@@ -132,16 +164,83 @@ public sealed class AudioRecorder : IDisposable
         IsRecording = false;
     }
 
-    private static byte[] DownsampleTo16KhzMono(byte[] inputBytes)
+    private void PublishConvertedAudioChunks(ISampleProvider sampleProvider, WaveFileWriter waveWriter)
     {
-        if (inputBytes.Length == 0)
+        var sampleBuffer = new float[4096];
+        var convertedBuffer = new byte[sampleBuffer.Length * 2];
+
+        while (true)
         {
-            return inputBytes;
+            var samplesRead = sampleProvider.Read(sampleBuffer, 0, sampleBuffer.Length);
+            if (samplesRead == 0)
+            {
+                break;
+            }
+
+            for (var i = 0; i < samplesRead; i++)
+            {
+                var sample = (short)Math.Clamp(sampleBuffer[i] * short.MaxValue, short.MinValue, short.MaxValue);
+                convertedBuffer[i * 2] = (byte)(sample & 0xFF);
+                convertedBuffer[(i * 2) + 1] = (byte)((sample >> 8) & 0xFF);
+            }
+
+            var bytesProduced = samplesRead * 2;
+            waveWriter.Write(convertedBuffer, 0, bytesProduced);
+            waveWriter.Flush();
+            AppendStreamingChunkBytes(convertedBuffer, bytesProduced);
+        }
+    }
+
+    private void AppendStreamingChunkBytes(byte[] bytes, int count)
+    {
+        if (_streamingChunkBuffer is null || count <= 0)
+        {
+            return;
         }
 
-        using var inputStream = new MemoryStream(inputBytes);
-        using var reader = new WaveFileReader(inputStream);
-        var sampleProvider = reader.ToSampleProvider();
+        _streamingChunkBuffer.Write(bytes, 0, count);
+
+        while (_streamingChunkBuffer.Length >= StreamingChunkSizeBytes)
+        {
+            EmitStreamingChunk(StreamingChunkSizeBytes);
+        }
+    }
+
+    private void FlushStreamingChunkBuffer()
+    {
+        if (_streamingChunkBuffer is null || _streamingChunkBuffer.Length == 0)
+        {
+            return;
+        }
+
+        EmitStreamingChunk((int)_streamingChunkBuffer.Length);
+    }
+
+    private void EmitStreamingChunk(int bytesToEmit)
+    {
+        if (_streamingChunkBuffer is null || bytesToEmit <= 0)
+        {
+            return;
+        }
+
+        var buffer = _streamingChunkBuffer.GetBuffer();
+        var chunkBytes = new byte[bytesToEmit];
+        Buffer.BlockCopy(buffer, 0, chunkBytes, 0, bytesToEmit);
+        ChunkAvailable?.Invoke(this, new AudioChunkAvailableEventArgs(chunkBytes));
+
+        var remainingBytes = (int)_streamingChunkBuffer.Length - bytesToEmit;
+        if (remainingBytes > 0)
+        {
+            Buffer.BlockCopy(buffer, bytesToEmit, buffer, 0, remainingBytes);
+        }
+
+        _streamingChunkBuffer.SetLength(remainingBytes);
+        _streamingChunkBuffer.Position = remainingBytes;
+    }
+
+    private static ISampleProvider CreateResampledProvider(IWaveProvider waveProvider)
+    {
+        var sampleProvider = waveProvider.ToSampleProvider();
         ISampleProvider resampledProvider = sampleProvider;
 
         if (sampleProvider.WaveFormat.SampleRate != 16000)
@@ -151,39 +250,14 @@ public sealed class AudioRecorder : IDisposable
 
         if (resampledProvider.WaveFormat.Channels > 1)
         {
-            var monoProvider = new StereoToMonoSampleProvider(resampledProvider);
-            monoProvider.LeftVolume = 0.5f;
-            monoProvider.RightVolume = 0.5f;
+            var monoProvider = new StereoToMonoSampleProvider(resampledProvider)
+            {
+                LeftVolume = 0.5f,
+                RightVolume = 0.5f,
+            };
             resampledProvider = monoProvider;
         }
 
-        using var outputStream = new MemoryStream();
-        using (var writer = new WaveFileWriter(outputStream, new WaveFormat(16000, 16, 1)))
-        {
-            var buffer = new float[16000];
-            var convertedBuffer = new byte[buffer.Length * 2];
-
-            while (true)
-            {
-                var samplesRead = resampledProvider.Read(buffer, 0, buffer.Length);
-                if (samplesRead == 0)
-                {
-                    break;
-                }
-
-                for (var i = 0; i < samplesRead; i++)
-                {
-                    var sample = (short)Math.Clamp(buffer[i] * short.MaxValue, short.MinValue, short.MaxValue);
-                    convertedBuffer[(i * 2)] = (byte)(sample & 0xFF);
-                    convertedBuffer[(i * 2) + 1] = (byte)((sample >> 8) & 0xFF);
-                }
-
-                writer.Write(convertedBuffer, 0, samplesRead * 2);
-            }
-
-            writer.Flush();
-        }
-
-        return outputStream.ToArray();
+        return resampledProvider;
     }
 }

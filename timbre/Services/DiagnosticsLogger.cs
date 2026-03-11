@@ -1,4 +1,5 @@
 ﻿using System.Diagnostics;
+using System.Threading.Channels;
 
 namespace timbre.Services;
 
@@ -8,6 +9,7 @@ public static class DiagnosticsLogger
     private const string CurrentAppDataFolderName = "Timbre";
     private const string LegacyAppDataFolderName = "WhisperWindows";
     private static string? _logFilePath;
+    private static Channel<string>? _logChannel;
     private static bool _initialized;
 
     public static string? LogFilePath => _logFilePath;
@@ -32,6 +34,13 @@ public static class DiagnosticsLogger
             _logFilePath = Path.Combine(
                 logDirectory,
                 $"startup-{DateTime.Now:yyyyMMdd-HHmmss}.log");
+
+            _logChannel = Channel.CreateUnbounded<string>(new UnboundedChannelOptions
+            {
+                SingleReader = true,
+                SingleWriter = false,
+            });
+            StartBackgroundWriter(_logFilePath, _logChannel.Reader);
 
             _initialized = true;
             WriteInternal("INFO", "Diagnostics initialized.");
@@ -66,6 +75,11 @@ public static class DiagnosticsLogger
             Error("TaskScheduler unobserved task exception", args.Exception);
         };
 
+        if (!Debugger.IsAttached)
+        {
+            return;
+        }
+
         AppDomain.CurrentDomain.FirstChanceException += (_, args) =>
         {
             if (args.Exception is null)
@@ -99,21 +113,49 @@ public static class DiagnosticsLogger
     {
         var line = $"{DateTime.Now:O} [{level}] {message}";
 
+        Channel<string>? logChannel;
         lock (SyncRoot)
+        {
+            logChannel = _logChannel;
+            Debug.WriteLine(line);
+        }
+
+        try
+        {
+            logChannel?.Writer.TryWrite(line);
+        }
+        catch
+        {
+        }
+    }
+
+    private static void StartBackgroundWriter(string logFilePath, ChannelReader<string> reader)
+    {
+        _ = Task.Run(async () =>
         {
             try
             {
-                if (!string.IsNullOrWhiteSpace(_logFilePath))
+                await using var stream = new FileStream(
+                    logFilePath,
+                    FileMode.Append,
+                    FileAccess.Write,
+                    FileShare.ReadWrite,
+                    4096,
+                    FileOptions.Asynchronous);
+                await using var writer = new StreamWriter(stream)
                 {
-                    File.AppendAllText(_logFilePath, line + Environment.NewLine);
+                    AutoFlush = true,
+                };
+
+                await foreach (var line in reader.ReadAllAsync())
+                {
+                    await writer.WriteLineAsync(line);
                 }
             }
             catch
             {
             }
-
-            Debug.WriteLine(line);
-        }
+        });
     }
 
     private static void MigrateLegacyLogs(string newLogDirectory)

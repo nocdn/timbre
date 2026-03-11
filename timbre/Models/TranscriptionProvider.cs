@@ -4,4 +4,5 @@ public enum TranscriptionProvider
 {
     Groq,
     Fireworks,
+    Deepgram,
 }

@@ -55,6 +55,8 @@ public sealed class AppSettingsStore : IAppSettingsStore
 
             var json = await File.ReadAllTextAsync(_settingsPath, cancellationToken);
             var storedSettings = JsonSerializer.Deserialize<StoredSettings>(json, _serializerOptions) ?? new StoredSettings();
+            var deepgramStreamingEnabled = storedSettings.DeepgramStreamingEnabled ?? InferDeepgramStreamingEnabled(storedSettings.DeepgramModel);
+            var deepgramModel = NormalizeDeepgramModel(storedSettings.DeepgramModel, deepgramStreamingEnabled);
 
             _currentSettings = new AppSettings
             {
@@ -62,6 +64,7 @@ public sealed class AppSettingsStore : IAppSettingsStore
                 Provider = storedSettings.Provider ?? TranscriptionProvider.Groq,
                 GroqApiKey = Decrypt(storedSettings.EncryptedGroqApiKey),
                 FireworksApiKey = Decrypt(storedSettings.EncryptedFireworksApiKey),
+                DeepgramApiKey = Decrypt(storedSettings.EncryptedDeepgramApiKey),
                 Hotkey = storedSettings.Hotkey ?? HotkeyBinding.Default,
                 PasteLastTranscriptHotkey = storedSettings.PasteLastTranscriptHotkey ?? HotkeyBinding.PasteLastTranscriptDefault,
                 OpenHistoryHotkey = storedSettings.OpenHistoryHotkey ?? HotkeyBinding.OpenHistoryDefault,
@@ -77,11 +80,14 @@ public sealed class AppSettingsStore : IAppSettingsStore
                     ? "whisper-v3-turbo"
                     : storedSettings.FireworksModel,
                 FireworksLanguage = NormalizeLanguage(storedSettings.FireworksLanguage),
+                DeepgramModel = deepgramModel,
+                DeepgramLanguage = NormalizeLanguage(storedSettings.DeepgramLanguage),
+                DeepgramStreamingEnabled = deepgramStreamingEnabled,
                 HasCompletedInitialSetup = storedSettings.HasCompletedInitialSetup ?? false,
             };
 
             DiagnosticsLogger.Info(
-                $"Settings loaded. SelectedInputDeviceId='{_currentSettings.SelectedInputDeviceId}', Provider='{_currentSettings.Provider}', HasGroqApiKey={!string.IsNullOrWhiteSpace(_currentSettings.GroqApiKey)}, HasFireworksApiKey={!string.IsNullOrWhiteSpace(_currentSettings.FireworksApiKey)}, Hotkey='{_currentSettings.Hotkey.ToDisplayString()}', PasteLastTranscriptHotkey='{_currentSettings.PasteLastTranscriptHotkey.ToDisplayString()}', OpenHistoryHotkey='{_currentSettings.OpenHistoryHotkey.ToDisplayString()}', TranscriptHistoryLimit={_currentSettings.TranscriptHistoryLimit}, PushToTalk={_currentSettings.PushToTalk}, LaunchAtStartup={_currentSettings.LaunchAtStartup}, SoundFeedbackEnabled={_currentSettings.SoundFeedbackEnabled}, GroqModel='{_currentSettings.GroqModel}', GroqLanguage='{_currentSettings.GroqLanguage}', FireworksModel='{_currentSettings.FireworksModel}', FireworksLanguage='{_currentSettings.FireworksLanguage}', HasCompletedInitialSetup={_currentSettings.HasCompletedInitialSetup}.");
+                $"Settings loaded. SelectedInputDeviceId='{_currentSettings.SelectedInputDeviceId}', Provider='{_currentSettings.Provider}', HasGroqApiKey={!string.IsNullOrWhiteSpace(_currentSettings.GroqApiKey)}, HasFireworksApiKey={!string.IsNullOrWhiteSpace(_currentSettings.FireworksApiKey)}, HasDeepgramApiKey={!string.IsNullOrWhiteSpace(_currentSettings.DeepgramApiKey)}, Hotkey='{_currentSettings.Hotkey.ToDisplayString()}', PasteLastTranscriptHotkey='{_currentSettings.PasteLastTranscriptHotkey.ToDisplayString()}', OpenHistoryHotkey='{_currentSettings.OpenHistoryHotkey.ToDisplayString()}', TranscriptHistoryLimit={_currentSettings.TranscriptHistoryLimit}, PushToTalk={_currentSettings.PushToTalk}, LaunchAtStartup={_currentSettings.LaunchAtStartup}, SoundFeedbackEnabled={_currentSettings.SoundFeedbackEnabled}, GroqModel='{_currentSettings.GroqModel}', GroqLanguage='{_currentSettings.GroqLanguage}', FireworksModel='{_currentSettings.FireworksModel}', FireworksLanguage='{_currentSettings.FireworksLanguage}', DeepgramModel='{_currentSettings.DeepgramModel}', DeepgramLanguage='{_currentSettings.DeepgramLanguage}', DeepgramStreamingEnabled={_currentSettings.DeepgramStreamingEnabled}, HasCompletedInitialSetup={_currentSettings.HasCompletedInitialSetup}.");
 
             _hasLoadedSettings = true;
             return _currentSettings;
@@ -92,7 +98,7 @@ public sealed class AppSettingsStore : IAppSettingsStore
         }
         catch (CryptographicException exception)
         {
-            throw new InvalidOperationException("The saved Groq API key could not be read. Open Settings and save it again.", exception);
+            throw new InvalidOperationException("A saved API key could not be read. Open Settings and save it again.", exception);
         }
         finally
         {
@@ -107,13 +113,14 @@ public sealed class AppSettingsStore : IAppSettingsStore
         try
         {
             DiagnosticsLogger.Info(
-                $"Saving settings. SelectedInputDeviceId='{settings.SelectedInputDeviceId}', Provider='{settings.Provider}', HasGroqApiKey={!string.IsNullOrWhiteSpace(settings.GroqApiKey)}, HasFireworksApiKey={!string.IsNullOrWhiteSpace(settings.FireworksApiKey)}, Hotkey='{settings.Hotkey.ToDisplayString()}', PasteLastTranscriptHotkey='{settings.PasteLastTranscriptHotkey.ToDisplayString()}', OpenHistoryHotkey='{settings.OpenHistoryHotkey.ToDisplayString()}', TranscriptHistoryLimit={settings.TranscriptHistoryLimit}, PushToTalk={settings.PushToTalk}, LaunchAtStartup={settings.LaunchAtStartup}, SoundFeedbackEnabled={settings.SoundFeedbackEnabled}, GroqModel='{settings.GroqModel}', GroqLanguage='{settings.GroqLanguage}', FireworksModel='{settings.FireworksModel}', FireworksLanguage='{settings.FireworksLanguage}'.");
+                $"Saving settings. SelectedInputDeviceId='{settings.SelectedInputDeviceId}', Provider='{settings.Provider}', HasGroqApiKey={!string.IsNullOrWhiteSpace(settings.GroqApiKey)}, HasFireworksApiKey={!string.IsNullOrWhiteSpace(settings.FireworksApiKey)}, HasDeepgramApiKey={!string.IsNullOrWhiteSpace(settings.DeepgramApiKey)}, Hotkey='{settings.Hotkey.ToDisplayString()}', PasteLastTranscriptHotkey='{settings.PasteLastTranscriptHotkey.ToDisplayString()}', OpenHistoryHotkey='{settings.OpenHistoryHotkey.ToDisplayString()}', TranscriptHistoryLimit={settings.TranscriptHistoryLimit}, PushToTalk={settings.PushToTalk}, LaunchAtStartup={settings.LaunchAtStartup}, SoundFeedbackEnabled={settings.SoundFeedbackEnabled}, GroqModel='{settings.GroqModel}', GroqLanguage='{settings.GroqLanguage}', FireworksModel='{settings.FireworksModel}', FireworksLanguage='{settings.FireworksLanguage}', DeepgramModel='{settings.DeepgramModel}', DeepgramLanguage='{settings.DeepgramLanguage}', DeepgramStreamingEnabled={settings.DeepgramStreamingEnabled}.");
             var storedSettings = new StoredSettings
             {
                 SelectedInputDeviceId = settings.SelectedInputDeviceId,
                 Provider = settings.Provider,
                 EncryptedGroqApiKey = Encrypt(settings.GroqApiKey),
                 EncryptedFireworksApiKey = Encrypt(settings.FireworksApiKey),
+                EncryptedDeepgramApiKey = Encrypt(settings.DeepgramApiKey),
                 Hotkey = settings.Hotkey,
                 PasteLastTranscriptHotkey = settings.PasteLastTranscriptHotkey,
                 OpenHistoryHotkey = settings.OpenHistoryHotkey,
@@ -125,6 +132,9 @@ public sealed class AppSettingsStore : IAppSettingsStore
                 GroqLanguage = NormalizeLanguage(settings.GroqLanguage),
                 FireworksModel = settings.FireworksModel,
                 FireworksLanguage = NormalizeLanguage(settings.FireworksLanguage),
+                DeepgramModel = NormalizeDeepgramModel(settings.DeepgramModel, settings.DeepgramStreamingEnabled),
+                DeepgramLanguage = NormalizeLanguage(settings.DeepgramLanguage),
+                DeepgramStreamingEnabled = settings.DeepgramStreamingEnabled,
                 HasCompletedInitialSetup = settings.HasCompletedInitialSetup,
             };
 
@@ -136,6 +146,7 @@ public sealed class AppSettingsStore : IAppSettingsStore
                 Provider = settings.Provider,
                 GroqApiKey = settings.GroqApiKey,
                 FireworksApiKey = settings.FireworksApiKey,
+                DeepgramApiKey = settings.DeepgramApiKey,
                 Hotkey = settings.Hotkey,
                 PasteLastTranscriptHotkey = settings.PasteLastTranscriptHotkey,
                 OpenHistoryHotkey = settings.OpenHistoryHotkey,
@@ -147,6 +158,9 @@ public sealed class AppSettingsStore : IAppSettingsStore
                 GroqLanguage = NormalizeLanguage(settings.GroqLanguage),
                 FireworksModel = settings.FireworksModel,
                 FireworksLanguage = NormalizeLanguage(settings.FireworksLanguage),
+                DeepgramModel = NormalizeDeepgramModel(settings.DeepgramModel, settings.DeepgramStreamingEnabled),
+                DeepgramLanguage = NormalizeLanguage(settings.DeepgramLanguage),
+                DeepgramStreamingEnabled = settings.DeepgramStreamingEnabled,
                 HasCompletedInitialSetup = settings.HasCompletedInitialSetup,
             };
             _hasLoadedSettings = true;
@@ -167,6 +181,22 @@ public sealed class AppSettingsStore : IAppSettingsStore
 
         var normalized = value.Trim().ToLowerInvariant();
         return normalized == "auto" ? "auto" : normalized;
+    }
+
+    private static bool InferDeepgramStreamingEnabled(string? model)
+    {
+        var normalized = model?.Trim().ToLowerInvariant();
+
+        return normalized switch
+        {
+            "nova-3" or "nova-3-general" => false,
+            _ => true,
+        };
+    }
+
+    private static string NormalizeDeepgramModel(string? model, bool streamingEnabled)
+    {
+        return streamingEnabled ? "flux" : "nova-3";
     }
 
     private static string? Encrypt(string? value)
@@ -223,6 +253,8 @@ public sealed class AppSettingsStore : IAppSettingsStore
 
         public string? EncryptedFireworksApiKey { get; set; }
 
+        public string? EncryptedDeepgramApiKey { get; set; }
+
         public TranscriptionProvider? Provider { get; set; }
 
         public HotkeyBinding? Hotkey { get; set; }
@@ -246,6 +278,12 @@ public sealed class AppSettingsStore : IAppSettingsStore
         public string? FireworksModel { get; set; }
 
         public string? FireworksLanguage { get; set; }
+
+        public string? DeepgramModel { get; set; }
+
+        public string? DeepgramLanguage { get; set; }
+
+        public bool? DeepgramStreamingEnabled { get; set; }
 
         public bool? HasCompletedInitialSetup { get; set; }
     }

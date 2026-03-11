@@ -18,6 +18,10 @@ namespace timbre;
 
 public sealed partial class MainWindow : Window
 {
+    private static readonly TimeSpan DefaultAutoSaveDelay = TimeSpan.FromMilliseconds(250);
+    private static readonly TimeSpan TextInputAutoSaveDelay = TimeSpan.FromMilliseconds(1000);
+    private static readonly TimeSpan NumberInputAutoSaveDelay = TimeSpan.FromMilliseconds(600);
+
     private readonly MainViewModel _viewModel;
     private readonly IntPtr _windowHandle;
     private readonly NativeMethods.WndProc _windowProc;
@@ -107,6 +111,7 @@ public sealed partial class MainWindow : Window
             InputDeviceComboBox.SelectedItem = _viewModel.SelectedInputDevice;
             GroqProviderRadioButton.IsChecked = _viewModel.IsGroqSelected;
             FireworksProviderRadioButton.IsChecked = _viewModel.IsFireworksSelected;
+            DeepgramProviderRadioButton.IsChecked = _viewModel.IsDeepgramSelected;
             HotkeyCaptureButton.Content = _viewModel.RecordingHotkeyDisplay;
             PasteLastTranscriptHotkeyCaptureButton.Content = _viewModel.PasteLastTranscriptHotkeyDisplay;
             OpenHistoryHotkeyCaptureButton.Content = _viewModel.OpenHistoryHotkeyDisplay;
@@ -122,8 +127,13 @@ public sealed partial class MainWindow : Window
             FireworksModelComboBox.ItemsSource = _viewModel.AvailableFireworksModels;
             FireworksModelComboBox.SelectedItem = _viewModel.SelectedFireworksModel;
             FireworksLanguageTextBox.Text = _viewModel.FireworksLanguage;
+            DeepgramApiKeyBox.Password = _viewModel.DeepgramApiKey;
+            DeepgramStreamingToggle.IsOn = _viewModel.DeepgramStreamingEnabled;
+            DeepgramModelComboBox.ItemsSource = _viewModel.AvailableDeepgramModels;
+            DeepgramModelComboBox.SelectedItem = _viewModel.SelectedDeepgramModel;
             GroqSettingsPanel.Visibility = _viewModel.GroqSettingsVisibility;
             FireworksSettingsPanel.Visibility = _viewModel.FireworksSettingsVisibility;
+            DeepgramSettingsPanel.Visibility = _viewModel.DeepgramSettingsVisibility;
             RestoreStatusText();
             HotkeyWarningTextBlock.Text = _viewModel.HotkeyWarningMessage;
             HotkeyWarningTextBlock.Visibility = _viewModel.HotkeyWarningVisibility;
@@ -181,7 +191,9 @@ public sealed partial class MainWindow : Window
     {
         _viewModel.SelectedProvider = FireworksProviderRadioButton.IsChecked == true
             ? TranscriptionProvider.Fireworks
-            : TranscriptionProvider.Groq;
+            : DeepgramProviderRadioButton.IsChecked == true
+                ? TranscriptionProvider.Deepgram
+                : TranscriptionProvider.Groq;
         ApplyViewModelToControls();
         QueueAutoSave();
     }
@@ -216,11 +228,23 @@ public sealed partial class MainWindow : Window
 
     private void SettingsTextBox_TextChanged(object sender, TextChangedEventArgs e)
     {
-        QueueAutoSave();
+        QueueAutoSave(TextInputAutoSaveDelay);
     }
 
     private void SettingsPasswordBox_PasswordChanged(object sender, RoutedEventArgs e)
     {
+        QueueAutoSave(TextInputAutoSaveDelay);
+    }
+
+    private void DeepgramStreamingToggle_Toggled(object sender, RoutedEventArgs e)
+    {
+        if (_isApplyingViewModel)
+        {
+            return;
+        }
+
+        _viewModel.DeepgramStreamingEnabled = DeepgramStreamingToggle.IsOn;
+        ApplyViewModelToControls();
         QueueAutoSave();
     }
 
@@ -241,7 +265,7 @@ public sealed partial class MainWindow : Window
 
     private void TranscriptHistoryLimitNumberBox_ValueChanged(NumberBox sender, NumberBoxValueChangedEventArgs args)
     {
-        QueueAutoSave();
+        QueueAutoSave(NumberInputAutoSaveDelay);
     }
 
     private async void TranscriptHistoryLimitNumberBox_KeyDown(object sender, KeyRoutedEventArgs e)
@@ -343,7 +367,7 @@ public sealed partial class MainWindow : Window
         ResetOpenHistoryHotkeyButton.IsEnabled = isEnabled;
     }
 
-    private void QueueAutoSave()
+    private void QueueAutoSave(TimeSpan? delay = null)
     {
         if (_isApplyingViewModel)
         {
@@ -354,16 +378,16 @@ public sealed partial class MainWindow : Window
         _autoSaveCancellationTokenSource?.Dispose();
         _autoSaveCancellationTokenSource = new CancellationTokenSource();
         var cancellationToken = _autoSaveCancellationTokenSource.Token;
-        _ = SaveSettingsAsync(immediate: false, cancellationToken);
+        _ = SaveSettingsAsync(immediate: false, cancellationToken, delay ?? DefaultAutoSaveDelay);
     }
 
-    private async Task SaveSettingsAsync(bool immediate, CancellationToken cancellationToken = default)
+    private async Task SaveSettingsAsync(bool immediate, CancellationToken cancellationToken = default, TimeSpan? autoSaveDelay = null)
     {
         try
         {
             if (!immediate)
             {
-                await Task.Delay(TimeSpan.FromMilliseconds(350), cancellationToken);
+                await Task.Delay(autoSaveDelay ?? DefaultAutoSaveDelay, cancellationToken);
             }
 
             await _saveLock.WaitAsync(cancellationToken);
@@ -395,9 +419,13 @@ public sealed partial class MainWindow : Window
         _viewModel.SelectedInputDevice = InputDeviceComboBox.SelectedItem as AudioInputDevice;
         _viewModel.SelectedProvider = FireworksProviderRadioButton.IsChecked == true
             ? TranscriptionProvider.Fireworks
-            : TranscriptionProvider.Groq;
+            : DeepgramProviderRadioButton.IsChecked == true
+                ? TranscriptionProvider.Deepgram
+                : TranscriptionProvider.Groq;
         _viewModel.GroqApiKey = GroqApiKeyBox.Password;
         _viewModel.FireworksApiKey = FireworksApiKeyBox.Password;
+        _viewModel.DeepgramApiKey = DeepgramApiKeyBox.Password;
+        _viewModel.DeepgramStreamingEnabled = DeepgramStreamingToggle.IsOn;
         _viewModel.PushToTalk = PushToTalkToggle.IsOn;
         _viewModel.LaunchAtStartup = LaunchAtStartupToggle.IsOn;
         _viewModel.SoundFeedbackEnabled = SoundFeedbackToggle.IsOn;
@@ -406,6 +434,7 @@ public sealed partial class MainWindow : Window
         _viewModel.GroqLanguage = GroqLanguageTextBox.Text;
         _viewModel.SelectedFireworksModel = FireworksModelComboBox.SelectedItem as string ?? _viewModel.AvailableFireworksModels[0];
         _viewModel.FireworksLanguage = FireworksLanguageTextBox.Text;
+        _viewModel.SelectedDeepgramModel = DeepgramModelComboBox.SelectedItem as string ?? _viewModel.AvailableDeepgramModels[0];
     }
 
     private void RestoreStatusText()

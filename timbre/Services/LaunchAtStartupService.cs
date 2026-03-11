@@ -17,16 +17,24 @@ public sealed class LaunchAtStartupService : ILaunchAtStartupService
 
     public void SetEnabled(bool isEnabled)
     {
+        var expectedValue = BuildCommandLine();
         using var runKey = Registry.CurrentUser.CreateSubKey(RunKeyPath, writable: true)
             ?? throw new InvalidOperationException("Windows could not open the current user's startup registry key.");
 
+        var currentValue = runKey.GetValue(RunValueName) as string;
+
         if (isEnabled)
         {
-            runKey.SetValue(RunValueName, BuildCommandLine(), RegistryValueKind.String);
+            if (string.Equals(currentValue, expectedValue, StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            runKey.SetValue(RunValueName, expectedValue, RegistryValueKind.String);
             return;
         }
 
-        if (runKey.GetValue(RunValueName) is not null)
+        if (currentValue is not null)
         {
             runKey.DeleteValue(RunValueName, throwOnMissingValue: false);
         }

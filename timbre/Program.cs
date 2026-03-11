@@ -69,6 +69,15 @@ public static class Program
             };
             return new FireworksTranscriptionClient(httpClient);
         });
+        services.AddSingleton<DeepgramTranscriptionClient>(_ =>
+        {
+            var httpClient = new HttpClient
+            {
+                Timeout = TimeSpan.FromMinutes(2),
+            };
+            return new DeepgramTranscriptionClient(httpClient);
+        });
+        services.AddSingleton<DeepgramStreamingTranscriptionClient>();
         services.AddSingleton<ITranscriptionClientFactory, TranscriptionClientFactory>();
         services.AddSingleton<IDictationController, DictationController>();
         services.AddSingleton<MainViewModel>();
