@@ -1,0 +1,26 @@
+<svg
+    xmlns="http://www.w3.org/2000/svg"
+    width="480"
+    height="480"
+    viewBox="0 0 480 480"
+    fill="none"
+>
+    <defs>
+        <clipPath id="rounded-canvas">
+            <rect x="24" y="24" width="432" height="432" rx="43.2" ry="43.2" />
+        </clipPath>
+    </defs>
+
+    <g clip-path="url(#rounded-canvas)">
+        <rect x="24" y="24" width="432" height="432" rx="43.2" ry="43.2" fill="#3357D1" />
+
+        <rect x="96" y="96" width="72" height="72" fill="#DDDDDD" />
+        <rect x="168" y="168" width="72" height="72" fill="#DDDDDD" />
+        <rect x="240" y="240" width="72" height="72" fill="#DDDDDD" fill-opacity="0.2" />
+        <rect x="312" y="168" width="72" height="72" fill="#DDDDDD" fill-opacity="0.2" />
+        <rect x="168" y="312" width="72" height="72" fill="#DDDDDD" fill-opacity="0.2" />
+        <rect x="312" y="312" width="72" height="72" fill="#DDDDDD" />
+        <rect x="240" y="96" width="72" height="72" fill="#DDDDDD" />
+        <rect x="96" y="240" width="72" height="72" fill="#DDDDDD" />
+    </g>
+</svg>

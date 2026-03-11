@@ -6,6 +6,7 @@
           Id="ApplicationStartMenuShortcut"
           Name="Timbre"
           Description="Launch Timbre"
+          Icon="TimbreAppIcon.ico"
           Target="[INSTALLFOLDER]timbre.exe"
           WorkingDirectory="INSTALLFOLDER" />
         <RemoveFolder Id="RemoveApplicationProgramsFolder" Directory="ApplicationProgramsFolder" On="uninstall" />

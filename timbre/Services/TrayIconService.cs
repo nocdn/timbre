@@ -16,6 +16,7 @@ public sealed class TrayIconService : IDisposable
     private readonly Action _quit;
     private IntPtr _windowHandle;
     private IntPtr _iconHandle;
+    private bool _ownsIconHandle;
     private bool _initialized;
 
     public TrayIconService(Func<Task> openSettingsAsync, Action quit)
@@ -34,13 +35,14 @@ public sealed class TrayIconService : IDisposable
         }
 
         _windowHandle = windowHandle;
-        _iconHandle = NativeMethods.LoadIcon(IntPtr.Zero, new IntPtr(NativeMethods.IDI_APPLICATION));
+        _iconHandle = LoadTrayIcon(out _ownsIconHandle);
 
         var trayData = CreateNotifyIconData(NativeMethods.NIF_MESSAGE | NativeMethods.NIF_ICON | NativeMethods.NIF_TIP);
         trayData.szTip = AppName;
 
         if (!NativeMethods.Shell_NotifyIcon(NativeMethods.NIM_ADD, ref trayData))
         {
+            ReleaseIcon();
             throw new Win32Exception(Marshal.GetLastWin32Error(), "Failed to create the tray icon.");
         }
 
@@ -106,10 +108,49 @@ public sealed class TrayIconService : IDisposable
         var trayData = CreateNotifyIconData(0);
         NativeMethods.Shell_NotifyIcon(NativeMethods.NIM_DELETE, ref trayData);
 
+        ReleaseIcon();
         _initialized = false;
         _windowHandle = IntPtr.Zero;
-        _iconHandle = IntPtr.Zero;
         DiagnosticsLogger.Info("TrayIconService.Dispose completed.");
+    }
+
+    private static IntPtr LoadTrayIcon(out bool ownsIconHandle)
+    {
+        ownsIconHandle = false;
+
+        if (AppIcon.TryGetPath(out var iconPath))
+        {
+            var iconWidth = Math.Max(16, NativeMethods.GetSystemMetrics(NativeMethods.SM_CXSMICON));
+            var iconHeight = Math.Max(16, NativeMethods.GetSystemMetrics(NativeMethods.SM_CYSMICON));
+            var iconHandle = NativeMethods.LoadImage(
+                IntPtr.Zero,
+                iconPath,
+                NativeMethods.IMAGE_ICON,
+                iconWidth,
+                iconHeight,
+                NativeMethods.LR_LOADFROMFILE);
+
+            if (iconHandle != IntPtr.Zero)
+            {
+                ownsIconHandle = true;
+                return iconHandle;
+            }
+
+            DiagnosticsLogger.Info($"TrayIconService could not load custom icon from '{iconPath}'. Win32Error={Marshal.GetLastWin32Error()}.");
+        }
+
+        return NativeMethods.LoadIcon(IntPtr.Zero, new IntPtr(NativeMethods.IDI_APPLICATION));
+    }
+
+    private void ReleaseIcon()
+    {
+        if (_ownsIconHandle && _iconHandle != IntPtr.Zero)
+        {
+            _ = NativeMethods.DestroyIcon(_iconHandle);
+        }
+
+        _ownsIconHandle = false;
+        _iconHandle = IntPtr.Zero;
     }
 
     private NativeMethods.NOTIFYICONDATA CreateNotifyIconData(uint flags)

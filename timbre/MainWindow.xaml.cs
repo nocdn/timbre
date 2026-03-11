@@ -90,6 +90,7 @@ public sealed partial class MainWindow : Window
 
         var windowId = Microsoft.UI.Win32Interop.GetWindowIdFromWindow(_windowHandle);
         var appWindow = AppWindow.GetFromWindowId(windowId);
+        AppIcon.ApplyTo(appWindow);
         appWindow.Resize(new SizeInt32(760, 820));
 
         if (appWindow.Presenter is OverlappedPresenter presenter)

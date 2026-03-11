@@ -47,6 +47,7 @@ public sealed partial class TranscriptionHistoryWindow : Window
 
         var windowId = Microsoft.UI.Win32Interop.GetWindowIdFromWindow(_windowHandle);
         var appWindow = AppWindow.GetFromWindowId(windowId);
+        AppIcon.ApplyTo(appWindow);
         appWindow.Resize(new SizeInt32(900, 700));
 
         if (appWindow.Presenter is OverlappedPresenter presenter)

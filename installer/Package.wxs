@@ -10,9 +10,11 @@
     <MediaTemplate EmbedCab="yes" CompressionLevel="high" />
 
     <Property Id="ARPCOMMENTS" Value="Timbre is a Windows desktop dictation and transcription app." />
+    <Property Id="ARPPRODUCTICON" Value="TimbreAppIcon.ico" />
     <Property Id="WIXUI_INSTALLDIR" Value="INSTALLFOLDER" />
     <Property Id="WIXUI_EXITDIALOGOPTIONALCHECKBOX" Value="1" />
     <Property Id="WIXUI_EXITDIALOGOPTIONALCHECKBOXTEXT" Value="Launch Timbre" />
+    <Icon Id="TimbreAppIcon.ico" SourceFile="..\timbre\Assets\AppIcon.ico" />
 
     <WixVariable Id="WixUILicenseRtf" Value="License.rtf" />
     <UIRef Id="WixUI_ErrorProgressText" />
