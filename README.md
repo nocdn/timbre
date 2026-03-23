@@ -2,7 +2,7 @@
 
 This is an entirely vibe-coded recreation of "wispr flow" or "hex" natively for windows - to test out the limits of gpt-5.4. Safe to say it did a pretty good job. I mainly built this for myself, but if you find it useful, feel free to fork, create issues, or propose changes and I'll get to them.
 
-Quite a large change however, is that since my PC is really not that powerful, there are no local models being downloaded and ran, it uses either Groq's or Fireworks' Whisper-Large-V3(-Turbo) model to transcribe. Honestly, it works much quicker than a local model ever could on here (within 0.5-0.8s for 99% of runs)
+Quite a large change however, is that since my PC is really not that powerful, there are no local models being downloaded and ran, it uses either Groq's or Fireworks' Whisper-Large-V3(-Turbo) or Deepgram's Flux model to transcribe. Honestly, it works much quicker than a local model ever could on here (within 0.5-0.8s for 99% of runs)
 
 ### Some features:
 
@@ -10,7 +10,7 @@ Quite a large change however, is that since my PC is really not that powerful, t
 - paste transcript into the active app
 - transcript history
 - microphone selection
-- Groq and Fireworks provider support
+- Groq, Fireworks and Deepgram provider support
 - background work, and minimising to tray
 - configurable model/language
 - Windows installer/MSI
@@ -18,7 +18,7 @@ Quite a large change however, is that since my PC is really not that powerful, t
 ### Requirements
 
 - Windows 10/11
-- A Groq or Fireworks API key
+- A Groq or Fireworks or Deepgram API key
 
 ### Installation and Usage
 
