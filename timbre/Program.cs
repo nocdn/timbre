@@ -77,7 +77,16 @@ public static class Program
             };
             return new DeepgramTranscriptionClient(httpClient);
         });
+        services.AddSingleton<MistralTranscriptionClient>(_ =>
+        {
+            var httpClient = new HttpClient
+            {
+                Timeout = TimeSpan.FromMinutes(2),
+            };
+            return new MistralTranscriptionClient(httpClient);
+        });
         services.AddSingleton<DeepgramStreamingTranscriptionClient>();
+        services.AddSingleton<MistralRealtimeTranscriptionClient>();
         services.AddSingleton<ITranscriptionClientFactory, TranscriptionClientFactory>();
         services.AddSingleton<IDictationController, DictationController>();
         services.AddSingleton<MainViewModel>();

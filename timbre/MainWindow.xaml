@@ -60,7 +60,7 @@
                             </StackPanel>
                             <TextBlock
                                 Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                Text="Click the button, then press the new hotkey."
+                                Text="Click the button, then press the new hotkey. Enter and Esc are ignored."
                                 TextWrapping="WrapWholeWords" />
                         </StackPanel>
 
@@ -89,15 +89,25 @@
                             Visibility="Collapsed" />
 
                         <StackPanel Spacing="6">
-                            <NumberBox
-                                x:Name="TranscriptHistoryLimitNumberBox"
-                                Header="Save transcript history"
-                                Minimum="0"
-                                Maximum="500"
-                                SmallChange="1"
-                                ValueChanged="TranscriptHistoryLimitNumberBox_ValueChanged"
-                                SpinButtonPlacementMode="Compact" />
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <TextBox
+                                    x:Name="TranscriptHistoryLimitTextBox"
+                                    Width="160"
+                                    Header="Save transcript history" />
+                                <Button
+                                    x:Name="SaveTranscriptHistoryLimitButton"
+                                    Margin="0,28,0,0"
+                                    Click="SaveTranscriptHistoryLimitButton_Click"
+                                    Content="Save" />
+                                <TextBlock
+                                    x:Name="TranscriptHistoryLimitSavedTextBlock"
+                                    Margin="0,34,0,0"
+                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                    Text="Saved"
+                                    Visibility="Collapsed" />
+                            </StackPanel>
                             <TextBlock
+                                x:Name="TranscriptHistoryLimitDescriptionTextBlock"
                                 Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                 Text="Maximum transcripts to keep on disk. The oldest entries are removed first."
                                 TextWrapping="WrapWholeWords" />
@@ -133,6 +143,11 @@
                                     x:Name="DeepgramProviderRadioButton"
                                     Checked="ProviderRadioButton_Checked"
                                     Content="Deepgram"
+                                    GroupName="ProviderGroup" />
+                                <RadioButton
+                                    x:Name="MistralProviderRadioButton"
+                                    Checked="ProviderRadioButton_Checked"
+                                    Content="Mistral"
                                     GroupName="ProviderGroup" />
                             </StackPanel>
                         </StackPanel>
@@ -229,6 +244,39 @@
                         <TextBlock
                             Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                             Text="When streaming is on, Timbre uses Flux and pastes transcript chunks while you dictate. When streaming is off, Timbre uses Nova-3 and pastes the final transcript after recording stops. Language is fixed to English for now. Docs: https://developers.deepgram.com/reference/speech-to-text/listen-streaming and https://developers.deepgram.com/docs/pre-recorded-audio"
+                            TextWrapping="WrapWholeWords" />
+                    </StackPanel>
+                </StackPanel>
+
+                <StackPanel
+                    x:Name="MistralSettingsPanel"
+                    Spacing="14">
+                    <TextBlock
+                        Text="Mistral settings"
+                        Style="{ThemeResource SubtitleTextBlockStyle}" />
+                    <StackPanel Spacing="14">
+                        <PasswordBox
+                            x:Name="MistralApiKeyBox"
+                            PasswordChanged="SettingsPasswordBox_PasswordChanged"
+                            Header="Mistral API key" />
+
+                        <ToggleSwitch
+                            x:Name="MistralRealtimeToggle"
+                            Header="Realtime"
+                            Toggled="MistralRealtimeToggle_Toggled" />
+
+                        <ComboBox
+                            x:Name="MistralRealtimeModeComboBox"
+                            SelectionChanged="SettingsComboBox_SelectionChanged"
+                            Header="Realtime mode"
+                            PlaceholderText="Select a realtime mode">
+                            <ComboBoxItem Content="Fast stream" />
+                            <ComboBoxItem Content="Slow stream" />
+                        </ComboBox>
+
+                        <TextBlock
+                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                            Text="When realtime is off, Timbre uploads the finished recording to Voxtral Mini Transcribe. When realtime is on, Timbre streams 16 kHz PCM audio to Voxtral Mini Transcribe Realtime and pastes transcript chunks live while you record. Fast stream uses a 240 ms target delay. Slow stream uses a 2400 ms target delay for steadier chunks. Docs: https://docs.mistral.ai/capabilities/audio_transcription/offline_transcription and https://docs.mistral.ai/capabilities/audio_transcription/realtime_transcription"
                             TextWrapping="WrapWholeWords" />
                     </StackPanel>
                 </StackPanel>

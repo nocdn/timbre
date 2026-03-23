@@ -6,6 +6,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using timbre.Interfaces;
 using timbre.Models;
 
 namespace timbre.Services;
@@ -310,7 +311,7 @@ public sealed class DeepgramStreamingTranscriptionClient
     }
 }
 
-public sealed class DeepgramStreamingSession : IAsyncDisposable
+public sealed class DeepgramStreamingSession : IRealtimeTranscriptionSession
 {
     private static readonly JsonSerializerOptions SerializerOptions = new()
     {

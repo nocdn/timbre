@@ -5,4 +5,5 @@ public enum TranscriptionProvider
     Groq,
     Fireworks,
     Deepgram,
+    Mistral,
 }

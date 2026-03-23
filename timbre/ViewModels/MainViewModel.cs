@@ -41,7 +41,9 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private string _groqApiKey = string.Empty;
     private string _fireworksApiKey = string.Empty;
     private string _deepgramApiKey = string.Empty;
+    private string _mistralApiKey = string.Empty;
     private bool _deepgramStreamingEnabled = true;
+    private bool _mistralRealtimeEnabled;
     private bool _pushToTalk = true;
     private bool _launchAtStartup;
     private bool _soundFeedbackEnabled = true;
@@ -52,6 +54,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private string _groqLanguage = "en";
     private string _fireworksLanguage = "en";
     private string _selectedDeepgramModel = DeepgramStreamingModels[0];
+    private MistralRealtimeMode _mistralRealtimeMode = MistralRealtimeMode.Fast;
     private string _recordingHotkeyDisplay = HotkeyBinding.Default.ToDisplayString();
     private string _pasteLastTranscriptHotkeyDisplay = HotkeyBinding.PasteLastTranscriptDefault.ToDisplayString();
     private string _openHistoryHotkeyDisplay = HotkeyBinding.OpenHistoryDefault.ToDisplayString();
@@ -108,9 +111,11 @@ public sealed class MainViewModel : ObservableObject, IDisposable
                 OnPropertyChanged(nameof(IsGroqSelected));
                 OnPropertyChanged(nameof(IsFireworksSelected));
                 OnPropertyChanged(nameof(IsDeepgramSelected));
+                OnPropertyChanged(nameof(IsMistralSelected));
                 OnPropertyChanged(nameof(GroqSettingsVisibility));
                 OnPropertyChanged(nameof(FireworksSettingsVisibility));
                 OnPropertyChanged(nameof(DeepgramSettingsVisibility));
+                OnPropertyChanged(nameof(MistralSettingsVisibility));
             }
         }
     }
@@ -121,11 +126,15 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
     public bool IsDeepgramSelected => SelectedProvider == TranscriptionProvider.Deepgram;
 
+    public bool IsMistralSelected => SelectedProvider == TranscriptionProvider.Mistral;
+
     public Visibility GroqSettingsVisibility => IsGroqSelected ? Visibility.Visible : Visibility.Collapsed;
 
     public Visibility FireworksSettingsVisibility => IsFireworksSelected ? Visibility.Visible : Visibility.Collapsed;
 
     public Visibility DeepgramSettingsVisibility => IsDeepgramSelected ? Visibility.Visible : Visibility.Collapsed;
+
+    public Visibility MistralSettingsVisibility => IsMistralSelected ? Visibility.Visible : Visibility.Collapsed;
 
     public AudioInputDevice? SelectedInputDevice
     {
@@ -151,6 +160,12 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         set => SetProperty(ref _deepgramApiKey, value);
     }
 
+    public string MistralApiKey
+    {
+        get => _mistralApiKey;
+        set => SetProperty(ref _mistralApiKey, value);
+    }
+
     public bool DeepgramStreamingEnabled
     {
         get => _deepgramStreamingEnabled;
@@ -167,6 +182,12 @@ public sealed class MainViewModel : ObservableObject, IDisposable
                 }
             }
         }
+    }
+
+    public bool MistralRealtimeEnabled
+    {
+        get => _mistralRealtimeEnabled;
+        set => SetProperty(ref _mistralRealtimeEnabled, value);
     }
 
     public bool PushToTalk
@@ -233,6 +254,12 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     {
         get => _selectedDeepgramModel;
         set => SetProperty(ref _selectedDeepgramModel, value);
+    }
+
+    public MistralRealtimeMode MistralRealtimeMode
+    {
+        get => _mistralRealtimeMode;
+        set => SetProperty(ref _mistralRealtimeMode, value);
     }
 
     public string RecordingHotkeyDisplay
@@ -456,7 +483,10 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         GroqApiKey = settings.GroqApiKey ?? string.Empty;
         FireworksApiKey = settings.FireworksApiKey ?? string.Empty;
         DeepgramApiKey = settings.DeepgramApiKey ?? string.Empty;
+        MistralApiKey = settings.MistralApiKey ?? string.Empty;
         DeepgramStreamingEnabled = settings.DeepgramStreamingEnabled;
+        MistralRealtimeEnabled = settings.MistralRealtimeEnabled;
+        MistralRealtimeMode = settings.MistralRealtimeMode;
         PushToTalk = settings.PushToTalk;
         LaunchAtStartup = settings.LaunchAtStartup;
         SoundFeedbackEnabled = settings.SoundFeedbackEnabled;
@@ -485,6 +515,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             GroqApiKey = GroqApiKey.Trim(),
             FireworksApiKey = FireworksApiKey.Trim(),
             DeepgramApiKey = DeepgramApiKey.Trim(),
+            MistralApiKey = MistralApiKey.Trim(),
             Hotkey = _pendingHotkey,
             PasteLastTranscriptHotkey = _pendingPasteLastTranscriptHotkey,
             OpenHistoryHotkey = _pendingOpenHistoryHotkey,
@@ -499,6 +530,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             DeepgramModel = string.IsNullOrWhiteSpace(SelectedDeepgramModel) ? GetDefaultDeepgramModel(DeepgramStreamingEnabled) : SelectedDeepgramModel,
             DeepgramLanguage = "en",
             DeepgramStreamingEnabled = DeepgramStreamingEnabled,
+            MistralRealtimeEnabled = MistralRealtimeEnabled,
+            MistralRealtimeMode = MistralRealtimeMode,
             HasCompletedInitialSetup = true,
         };
     }
@@ -595,6 +628,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
                string.Equals(left.GroqApiKey, right.GroqApiKey, StringComparison.Ordinal) &&
                string.Equals(left.FireworksApiKey, right.FireworksApiKey, StringComparison.Ordinal) &&
                string.Equals(left.DeepgramApiKey, right.DeepgramApiKey, StringComparison.Ordinal) &&
+               string.Equals(left.MistralApiKey, right.MistralApiKey, StringComparison.Ordinal) &&
                Equals(left.Hotkey, right.Hotkey) &&
                Equals(left.PasteLastTranscriptHotkey, right.PasteLastTranscriptHotkey) &&
                Equals(left.OpenHistoryHotkey, right.OpenHistoryHotkey) &&
@@ -609,6 +643,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
                string.Equals(left.DeepgramModel, right.DeepgramModel, StringComparison.Ordinal) &&
                string.Equals(left.DeepgramLanguage, right.DeepgramLanguage, StringComparison.Ordinal) &&
                left.DeepgramStreamingEnabled == right.DeepgramStreamingEnabled &&
+               left.MistralRealtimeEnabled == right.MistralRealtimeEnabled &&
+               left.MistralRealtimeMode == right.MistralRealtimeMode &&
                left.HasCompletedInitialSetup == right.HasCompletedInitialSetup;
     }
 

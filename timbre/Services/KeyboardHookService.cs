@@ -27,6 +27,7 @@ public sealed class KeyboardHookService : IDisposable
     private bool _openHistoryComboActive;
     private bool _isCapturingHotkey;
     private Action<HotkeyBinding>? _hotkeyCapturedCallback;
+    private Func<HotkeyBinding, bool>? _hotkeyCaptureValidator;
     private HotkeyBinding _recordingHotkey = HotkeyBinding.Default;
     private HotkeyBinding _pasteLastTranscriptHotkey = HotkeyBinding.PasteLastTranscriptDefault;
     private HotkeyBinding _openHistoryHotkey = HotkeyBinding.OpenHistoryDefault;
@@ -80,9 +81,10 @@ public sealed class KeyboardHookService : IDisposable
             $"Keyboard hotkeys updated. Recording='{_recordingHotkey.ToDisplayString()}', PasteLastTranscript='{_pasteLastTranscriptHotkey.ToDisplayString()}', OpenHistory='{_openHistoryHotkey.ToDisplayString()}'.");
     }
 
-    public void BeginHotkeyCapture(Action<HotkeyBinding> hotkeyCapturedCallback)
+    public void BeginHotkeyCapture(Action<HotkeyBinding> hotkeyCapturedCallback, Func<HotkeyBinding, bool>? hotkeyCaptureValidator = null)
     {
         _hotkeyCapturedCallback = hotkeyCapturedCallback;
+        _hotkeyCaptureValidator = hotkeyCaptureValidator;
         _isCapturingHotkey = true;
         DiagnosticsLogger.Info("Hotkey capture started.");
     }
@@ -219,9 +221,16 @@ public sealed class KeyboardHookService : IDisposable
             KeyCode = virtualKeyCode,
         };
 
+        if (_hotkeyCaptureValidator is not null && !_hotkeyCaptureValidator(capturedHotkey))
+        {
+            DiagnosticsLogger.Info($"Hotkey capture rejected. Captured='{capturedHotkey.ToDisplayString()}'.");
+            return true;
+        }
+
         _isCapturingHotkey = false;
         var callback = _hotkeyCapturedCallback;
         _hotkeyCapturedCallback = null;
+        _hotkeyCaptureValidator = null;
 
         _dispatcherQueue.TryEnqueue(() => callback?.Invoke(capturedHotkey));
         DiagnosticsLogger.Info($"Hotkey capture completed. Captured='{capturedHotkey.ToDisplayString()}'.");

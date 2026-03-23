@@ -12,6 +12,8 @@ public sealed class AppSettings
 
     public string? DeepgramApiKey { get; init; }
 
+    public string? MistralApiKey { get; init; }
+
     public HotkeyBinding Hotkey { get; init; } = HotkeyBinding.Default;
 
     public HotkeyBinding PasteLastTranscriptHotkey { get; init; } = HotkeyBinding.PasteLastTranscriptDefault;
@@ -39,6 +41,10 @@ public sealed class AppSettings
     public string DeepgramLanguage { get; init; } = "en";
 
     public bool DeepgramStreamingEnabled { get; init; } = true;
+
+    public bool MistralRealtimeEnabled { get; init; }
+
+    public MistralRealtimeMode MistralRealtimeMode { get; init; } = MistralRealtimeMode.Fast;
 
     public bool HasCompletedInitialSetup { get; init; }
 }

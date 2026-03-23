@@ -9,6 +9,10 @@ public sealed class DictationController : IDictationController
     private const long GroqUploadLimitBytes = 25L * 1024 * 1024;
     private const long FireworksUploadLimitBytes = 1024L * 1024 * 1024;
     private const long DeepgramUploadLimitBytes = 2L * 1024 * 1024 * 1024;
+    private const string MistralOfflineModel = "voxtral-mini-latest";
+    private const string MistralRealtimeModel = "voxtral-mini-transcribe-realtime-2602";
+    private const int MistralFastStreamingDelayMs = 240;
+    private const int MistralSlowStreamingDelayMs = 2400;
     private const int MaxRetryCount = 2;
     private static readonly TimeSpan MinimumTranscribableDuration = TimeSpan.FromSeconds(0.25);
 
@@ -19,12 +23,13 @@ public sealed class DictationController : IDictationController
     private readonly ITranscriptHistoryStore _transcriptHistoryStore;
     private readonly INotificationService _notificationService;
     private readonly DeepgramStreamingTranscriptionClient _deepgramStreamingClient;
+    private readonly MistralRealtimeTranscriptionClient _mistralRealtimeClient;
     private readonly SemaphoreSlim _stateLock = new(1, 1);
     private readonly SemaphoreSlim _streamingPasteLock = new(1, 1);
     private readonly object _streamingFailureLock = new();
 
     private AudioRecorder? _activeRecorder;
-    private DeepgramStreamingSession? _activeDeepgramSession;
+    private IRealtimeTranscriptionSession? _activeStreamingSession;
     private CancellationTokenSource? _transcriptionCancellationTokenSource;
     private Exception? _streamingFailure;
     private bool _isTranscribing;
@@ -37,7 +42,8 @@ public sealed class DictationController : IDictationController
         IClipboardPasteService clipboardPasteService,
         ITranscriptHistoryStore transcriptHistoryStore,
         INotificationService notificationService,
-        DeepgramStreamingTranscriptionClient deepgramStreamingClient)
+        DeepgramStreamingTranscriptionClient deepgramStreamingClient,
+        MistralRealtimeTranscriptionClient mistralRealtimeClient)
     {
         _settingsStore = settingsStore;
         _audioDeviceService = audioDeviceService;
@@ -46,6 +52,7 @@ public sealed class DictationController : IDictationController
         _transcriptHistoryStore = transcriptHistoryStore;
         _notificationService = notificationService;
         _deepgramStreamingClient = deepgramStreamingClient;
+        _mistralRealtimeClient = mistralRealtimeClient;
     }
 
     public event EventHandler<DictationStatusChangedEventArgs>? StatusChanged;
@@ -78,24 +85,19 @@ public sealed class DictationController : IDictationController
             }
 
             var recorder = new AudioRecorder();
-            DeepgramStreamingSession? deepgramSession = null;
+            IRealtimeTranscriptionSession? streamingSession = null;
             CancellationTokenSource? transcriptionCancellationTokenSource = null;
 
             try
             {
-                if (UsesDeepgramStreaming(settings))
+                if (UsesRealtimeStreaming(settings))
                 {
-                    DiagnosticsLogger.Info("Preparing Deepgram live streaming session before microphone start.");
+                    DiagnosticsLogger.Info($"Preparing {GetProviderDisplayName(settings.Provider)} live streaming session before microphone start.");
                     transcriptionCancellationTokenSource = new CancellationTokenSource();
                     ResetStreamingFailure();
-                    deepgramSession = await _deepgramStreamingClient.ConnectAsync(
-                        GetApiKey(settings),
-                        GetModel(settings),
-                        GetLanguage(settings),
-                        AppendStreamingTranscriptChunkAsync,
-                        transcriptionCancellationTokenSource.Token);
+                    streamingSession = await CreateRealtimeStreamingSessionAsync(settings, transcriptionCancellationTokenSource.Token);
                     recorder.ChunkAvailable += OnRecorderChunkAvailable;
-                    _activeDeepgramSession = deepgramSession;
+                    _activeStreamingSession = streamingSession;
                     _transcriptionCancellationTokenSource = transcriptionCancellationTokenSource;
                 }
 
@@ -105,7 +107,7 @@ public sealed class DictationController : IDictationController
                 DiagnosticsLogger.Info($"Recording started. Provider={settings.Provider}, Device='{recorder.DeviceName}', WaveFormat='{recorder.WaveFormatDescription}'.");
                 PublishStatus(
                     DictationState.Recording,
-                    UsesDeepgramStreaming(settings)
+                    UsesRealtimeStreaming(settings)
                         ? "Recording and streaming... release or press the hotkey again to stop."
                         : "Recording... release or press the hotkey again to stop.",
                     false);
@@ -116,19 +118,19 @@ public sealed class DictationController : IDictationController
                 recorder.ChunkAvailable -= OnRecorderChunkAvailable;
                 recorder.Dispose();
 
-                if (deepgramSession is not null)
+                if (streamingSession is not null)
                 {
-                    await deepgramSession.DisposeAsync();
+                    await streamingSession.DisposeAsync();
                 }
 
                 transcriptionCancellationTokenSource?.Cancel();
                 transcriptionCancellationTokenSource?.Dispose();
-                _activeDeepgramSession = null;
+                _activeStreamingSession = null;
                 _transcriptionCancellationTokenSource = null;
                 PublishStatus(DictationState.Error, exception.Message, false);
                 _notificationService.ShowNotification(
-                    UsesDeepgramStreaming(settings) && deepgramSession is null
-                        ? "Deepgram connection failed"
+                    UsesRealtimeStreaming(settings) && streamingSession is null
+                        ? $"{GetProviderDisplayName(settings.Provider)} connection failed"
                         : "Microphone unavailable",
                     exception.Message,
                     true);
@@ -144,14 +146,14 @@ public sealed class DictationController : IDictationController
     public async Task<bool> StopDictationAsync()
     {
         AudioRecorder? recorder;
-        DeepgramStreamingSession? deepgramSession;
+        IRealtimeTranscriptionSession? streamingSession;
 
         await _stateLock.WaitAsync();
 
         try
         {
             recorder = _activeRecorder;
-            deepgramSession = _activeDeepgramSession;
+            streamingSession = _activeStreamingSession;
 
             if (recorder is null)
             {
@@ -159,7 +161,7 @@ public sealed class DictationController : IDictationController
             }
 
             _activeRecorder = null;
-            _activeDeepgramSession = null;
+            _activeStreamingSession = null;
             _isTranscribing = true;
         }
         finally
@@ -169,7 +171,7 @@ public sealed class DictationController : IDictationController
 
         try
         {
-            DiagnosticsLogger.Info($"Stopping dictation. HasDeepgramSession={deepgramSession is not null}.");
+            DiagnosticsLogger.Info($"Stopping dictation. HasStreamingSession={streamingSession is not null}.");
             recorder.ChunkAvailable -= OnRecorderChunkAvailable;
 
             byte[] audioBytes;
@@ -199,9 +201,9 @@ public sealed class DictationController : IDictationController
                 DiagnosticsLogger.Info(
                     $"Recording ignored because it was shorter than the minimum transcription threshold. DurationMs={audioDuration.TotalMilliseconds:F0}, ThresholdMs={MinimumTranscribableDuration.TotalMilliseconds:F0}, AudioBytes={audioBytes.Length}.");
 
-                if (deepgramSession is not null)
+                if (streamingSession is not null)
                 {
-                    await deepgramSession.DisposeAsync();
+                    await streamingSession.DisposeAsync();
                 }
 
                 PublishStatus(DictationState.Idle, string.Empty, false);
@@ -211,9 +213,9 @@ public sealed class DictationController : IDictationController
             var settings = _settingsStore.CurrentSettings;
             if (!HasProviderApiKey(settings))
             {
-                if (deepgramSession is not null)
+                if (streamingSession is not null)
                 {
-                    await deepgramSession.DisposeAsync();
+                    await streamingSession.DisposeAsync();
                 }
 
                 PublishStatus(DictationState.Error, GetMissingApiKeyMessage(settings.Provider), false);
@@ -223,9 +225,9 @@ public sealed class DictationController : IDictationController
 
             if (TryGetUploadLimitBytes(settings, out var uploadLimitBytes) && audioBytes.LongLength > uploadLimitBytes)
             {
-                if (deepgramSession is not null)
+                if (streamingSession is not null)
                 {
-                    await deepgramSession.DisposeAsync();
+                    await streamingSession.DisposeAsync();
                 }
 
                 var providerName = GetProviderDisplayName(settings.Provider);
@@ -237,15 +239,15 @@ public sealed class DictationController : IDictationController
             _transcriptionCancellationTokenSource ??= new CancellationTokenSource();
             PublishStatus(
                 DictationState.Transcribing,
-                UsesDeepgramStreaming(settings) ? "Finalizing Deepgram transcript..." : "Transcribing...",
+                UsesRealtimeStreaming(settings) ? $"Finalizing {GetProviderDisplayName(settings.Provider)} transcript..." : "Transcribing...",
                 true);
 
             string transcription;
 
             try
             {
-                transcription = deepgramSession is not null
-                    ? await FinalizeDeepgramStreamingAsync(deepgramSession, _transcriptionCancellationTokenSource.Token)
+                transcription = streamingSession is not null
+                    ? await FinalizeRealtimeStreamingAsync(streamingSession, settings.Provider, _transcriptionCancellationTokenSource.Token)
                     : await TranscribeWithRetryAsync(audioBytes, settings, _transcriptionCancellationTokenSource.Token);
 
                 DiagnosticsLogger.Info($"Transcription completed. Provider={settings.Provider}, TranscriptLength={transcription.Length}.");
@@ -282,7 +284,7 @@ public sealed class DictationController : IDictationController
                 _notificationService.ShowNotification("Transcript history failed", exception.Message, true);
             }
 
-            if (deepgramSession is null)
+            if (streamingSession is null || !UsesLiveChunkPasting(settings))
             {
                 try
                 {
@@ -395,11 +397,11 @@ public sealed class DictationController : IDictationController
             _activeRecorder.Dispose();
         }
 
-        if (_activeDeepgramSession is not null)
+        if (_activeStreamingSession is not null)
         {
             try
             {
-                _activeDeepgramSession.DisposeAsync().AsTask().GetAwaiter().GetResult();
+                _activeStreamingSession.DisposeAsync().AsTask().GetAwaiter().GetResult();
             }
             catch
             {
@@ -437,7 +439,29 @@ public sealed class DictationController : IDictationController
         }
     }
 
-    private async Task<string> FinalizeDeepgramStreamingAsync(DeepgramStreamingSession deepgramSession, CancellationToken cancellationToken)
+    private async Task<IRealtimeTranscriptionSession> CreateRealtimeStreamingSessionAsync(AppSettings settings, CancellationToken cancellationToken)
+    {
+        return settings.Provider switch
+        {
+            TranscriptionProvider.Deepgram => await _deepgramStreamingClient.ConnectAsync(
+                GetApiKey(settings),
+                GetModel(settings),
+                GetLanguage(settings),
+                AppendStreamingTranscriptChunkAsync,
+                cancellationToken),
+            TranscriptionProvider.Mistral => await _mistralRealtimeClient.ConnectAsync(
+                GetApiKey(settings),
+                GetMistralStreamingDelayMilliseconds(settings),
+                AppendStreamingTranscriptChunkAsync,
+                cancellationToken),
+            _ => throw new InvalidOperationException($"{GetProviderDisplayName(settings.Provider)} does not support realtime streaming."),
+        };
+    }
+
+    private async Task<string> FinalizeRealtimeStreamingAsync(
+        IRealtimeTranscriptionSession streamingSession,
+        TranscriptionProvider provider,
+        CancellationToken cancellationToken)
     {
         var failure = GetStreamingFailure();
         if (failure is not null)
@@ -445,7 +469,7 @@ public sealed class DictationController : IDictationController
             throw WrapStreamingException(failure);
         }
 
-        var transcription = await deepgramSession.CompleteAsync(cancellationToken);
+        var transcription = await streamingSession.CompleteAsync(cancellationToken);
         failure = GetStreamingFailure();
         if (failure is not null)
         {
@@ -454,7 +478,7 @@ public sealed class DictationController : IDictationController
 
         if (string.IsNullOrWhiteSpace(transcription))
         {
-            throw new TranscriptionException("Deepgram returned an empty transcription.", false);
+            throw new TranscriptionException($"{GetProviderDisplayName(provider)} returned an empty transcription.", false);
         }
 
         return transcription.Trim();
@@ -467,7 +491,7 @@ public sealed class DictationController : IDictationController
             return;
         }
 
-        DiagnosticsLogger.Info($"Pasting Deepgram finalized chunk. TextLength={text.Length}, Preview='{CreateTranscriptPreview(text)}'.");
+        DiagnosticsLogger.Info($"Pasting realtime transcript chunk. TextLength={text.Length}, Preview='{CreateTranscriptPreview(text)}'.");
         await _streamingPasteLock.WaitAsync(cancellationToken);
 
         try
@@ -482,22 +506,22 @@ public sealed class DictationController : IDictationController
 
     private void OnRecorderChunkAvailable(object? sender, AudioChunkAvailableEventArgs eventArgs)
     {
-        var deepgramSession = _activeDeepgramSession;
+        var streamingSession = _activeStreamingSession;
         var cancellationTokenSource = _transcriptionCancellationTokenSource;
 
-        if (deepgramSession is null || cancellationTokenSource is null || cancellationTokenSource.IsCancellationRequested)
+        if (streamingSession is null || cancellationTokenSource is null || cancellationTokenSource.IsCancellationRequested)
         {
             return;
         }
 
-        _ = SendStreamingAudioChunkAsync(deepgramSession, eventArgs.AudioBytes, cancellationTokenSource.Token);
+        _ = SendStreamingAudioChunkAsync(streamingSession, eventArgs.AudioBytes, cancellationTokenSource.Token);
     }
 
-    private async Task SendStreamingAudioChunkAsync(DeepgramStreamingSession deepgramSession, byte[] audioBytes, CancellationToken cancellationToken)
+    private async Task SendStreamingAudioChunkAsync(IRealtimeTranscriptionSession streamingSession, byte[] audioBytes, CancellationToken cancellationToken)
     {
         try
         {
-            await deepgramSession.SendAudioAsync(audioBytes, cancellationToken);
+            await streamingSession.SendAudioAsync(audioBytes, cancellationToken);
         }
         catch (Exception exception)
         {
@@ -512,7 +536,7 @@ public sealed class DictationController : IDictationController
             _streamingFailure ??= exception;
         }
 
-        DiagnosticsLogger.Error("Deepgram streaming failed.", exception);
+        DiagnosticsLogger.Error("Realtime transcription streaming failed.", exception);
         _transcriptionCancellationTokenSource?.Cancel();
     }
 
@@ -558,9 +582,24 @@ public sealed class DictationController : IDictationController
         return !string.IsNullOrWhiteSpace(GetApiKey(settings));
     }
 
+    private static bool UsesRealtimeStreaming(AppSettings settings)
+    {
+        return UsesDeepgramStreaming(settings) || UsesMistralRealtime(settings);
+    }
+
+    private static bool UsesLiveChunkPasting(AppSettings settings)
+    {
+        return UsesDeepgramStreaming(settings) || UsesMistralRealtime(settings);
+    }
+
     private static bool UsesDeepgramStreaming(AppSettings settings)
     {
         return settings.Provider == TranscriptionProvider.Deepgram && settings.DeepgramStreamingEnabled;
+    }
+
+    private static bool UsesMistralRealtime(AppSettings settings)
+    {
+        return settings.Provider == TranscriptionProvider.Mistral && settings.MistralRealtimeEnabled;
     }
 
     private static string GetApiKey(AppSettings settings)
@@ -569,6 +608,7 @@ public sealed class DictationController : IDictationController
         {
             TranscriptionProvider.Fireworks => settings.FireworksApiKey ?? string.Empty,
             TranscriptionProvider.Deepgram => settings.DeepgramApiKey ?? string.Empty,
+            TranscriptionProvider.Mistral => settings.MistralApiKey ?? string.Empty,
             _ => settings.GroqApiKey ?? string.Empty,
         };
     }
@@ -579,6 +619,7 @@ public sealed class DictationController : IDictationController
         {
             TranscriptionProvider.Fireworks => settings.FireworksModel,
             TranscriptionProvider.Deepgram => settings.DeepgramModel,
+            TranscriptionProvider.Mistral => settings.MistralRealtimeEnabled ? MistralRealtimeModel : MistralOfflineModel,
             _ => settings.GroqModel,
         };
     }
@@ -589,8 +630,16 @@ public sealed class DictationController : IDictationController
         {
             TranscriptionProvider.Fireworks => settings.FireworksLanguage,
             TranscriptionProvider.Deepgram => settings.DeepgramLanguage,
+            TranscriptionProvider.Mistral => "en",
             _ => settings.GroqLanguage,
         };
+    }
+
+    private static int GetMistralStreamingDelayMilliseconds(AppSettings settings)
+    {
+        return settings.MistralRealtimeMode == MistralRealtimeMode.Slow
+            ? MistralSlowStreamingDelayMs
+            : MistralFastStreamingDelayMs;
     }
 
     private static string GetMissingApiKeyMessage(TranscriptionProvider provider)
@@ -599,6 +648,7 @@ public sealed class DictationController : IDictationController
         {
             TranscriptionProvider.Fireworks => "Open Settings and save a Fireworks API key before dictating.",
             TranscriptionProvider.Deepgram => "Open Settings and save a Deepgram API key before dictating.",
+            TranscriptionProvider.Mistral => "Open Settings and save a Mistral API key before dictating.",
             _ => "Open Settings and save a Groq API key before dictating.",
         };
     }
@@ -628,6 +678,7 @@ public sealed class DictationController : IDictationController
         {
             TranscriptionProvider.Fireworks => "Fireworks",
             TranscriptionProvider.Deepgram => "Deepgram",
+            TranscriptionProvider.Mistral => "Mistral",
             _ => "Groq",
         };
     }

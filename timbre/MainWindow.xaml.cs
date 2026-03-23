@@ -4,14 +4,13 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
-using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using timbre.Interop;
 using timbre.Models;
 using timbre.Services;
 using timbre.ViewModels;
 using Windows.Graphics;
-using Windows.System;
+using Windows.UI;
 using WinRT.Interop;
 
 namespace timbre;
@@ -20,7 +19,10 @@ public sealed partial class MainWindow : Window
 {
     private static readonly TimeSpan DefaultAutoSaveDelay = TimeSpan.FromMilliseconds(250);
     private static readonly TimeSpan TextInputAutoSaveDelay = TimeSpan.FromMilliseconds(1000);
-    private static readonly TimeSpan NumberInputAutoSaveDelay = TimeSpan.FromMilliseconds(600);
+    private static readonly TimeSpan TranscriptHistorySavedMessageDuration = TimeSpan.FromMilliseconds(1500);
+    private static readonly TimeSpan TranscriptHistoryValidationMessageDuration = TimeSpan.FromMilliseconds(1750);
+    private const string TranscriptHistoryLimitDescriptionText = "Maximum transcripts to keep on disk. The oldest entries are removed first.";
+    private const string InvalidTranscriptHistoryLimitDescriptionText = "History amount must be a valid number";
 
     private readonly MainViewModel _viewModel;
     private readonly IntPtr _windowHandle;
@@ -31,6 +33,8 @@ public sealed partial class MainWindow : Window
     private KeyboardHookService? _keyboardHookService;
     private TranscriptionHistoryWindow? _historyWindow;
     private CancellationTokenSource? _autoSaveCancellationTokenSource;
+    private CancellationTokenSource? _transcriptHistorySavedMessageCancellationTokenSource;
+    private CancellationTokenSource? _transcriptHistoryValidationMessageCancellationTokenSource;
     private readonly SemaphoreSlim _saveLock = new(1, 1);
     private bool _allowClose;
     private bool _isApplyingViewModel;
@@ -39,7 +43,6 @@ public sealed partial class MainWindow : Window
         _viewModel = viewModel;
 
         InitializeComponent();
-        TranscriptHistoryLimitNumberBox.AddHandler(UIElement.KeyDownEvent, new KeyEventHandler(TranscriptHistoryLimitNumberBox_KeyDown), true);
 
         _windowHandle = WindowNative.GetWindowHandle(this);
         _windowProc = HandleWindowMessage;
@@ -113,10 +116,11 @@ public sealed partial class MainWindow : Window
             GroqProviderRadioButton.IsChecked = _viewModel.IsGroqSelected;
             FireworksProviderRadioButton.IsChecked = _viewModel.IsFireworksSelected;
             DeepgramProviderRadioButton.IsChecked = _viewModel.IsDeepgramSelected;
+            MistralProviderRadioButton.IsChecked = _viewModel.IsMistralSelected;
             HotkeyCaptureButton.Content = _viewModel.RecordingHotkeyDisplay;
             PasteLastTranscriptHotkeyCaptureButton.Content = _viewModel.PasteLastTranscriptHotkeyDisplay;
             OpenHistoryHotkeyCaptureButton.Content = _viewModel.OpenHistoryHotkeyDisplay;
-            TranscriptHistoryLimitNumberBox.Value = _viewModel.TranscriptHistoryLimitValue;
+            TranscriptHistoryLimitTextBox.Text = _viewModel.TranscriptHistoryLimit.ToString(CultureInfo.CurrentCulture);
             PushToTalkToggle.IsOn = _viewModel.PushToTalk;
             LaunchAtStartupToggle.IsOn = _viewModel.LaunchAtStartup;
             SoundFeedbackToggle.IsOn = _viewModel.SoundFeedbackEnabled;
@@ -132,9 +136,14 @@ public sealed partial class MainWindow : Window
             DeepgramStreamingToggle.IsOn = _viewModel.DeepgramStreamingEnabled;
             DeepgramModelComboBox.ItemsSource = _viewModel.AvailableDeepgramModels;
             DeepgramModelComboBox.SelectedItem = _viewModel.SelectedDeepgramModel;
+            MistralApiKeyBox.Password = _viewModel.MistralApiKey;
+            MistralRealtimeToggle.IsOn = _viewModel.MistralRealtimeEnabled;
+            MistralRealtimeModeComboBox.SelectedIndex = _viewModel.MistralRealtimeMode == MistralRealtimeMode.Slow ? 1 : 0;
+            MistralRealtimeModeComboBox.IsEnabled = _viewModel.MistralRealtimeEnabled;
             GroqSettingsPanel.Visibility = _viewModel.GroqSettingsVisibility;
             FireworksSettingsPanel.Visibility = _viewModel.FireworksSettingsVisibility;
             DeepgramSettingsPanel.Visibility = _viewModel.DeepgramSettingsVisibility;
+            MistralSettingsPanel.Visibility = _viewModel.MistralSettingsVisibility;
             RestoreStatusText();
             HotkeyWarningTextBlock.Text = _viewModel.HotkeyWarningMessage;
             HotkeyWarningTextBlock.Visibility = _viewModel.HotkeyWarningVisibility;
@@ -148,7 +157,7 @@ public sealed partial class MainWindow : Window
 
     private void HotkeyCaptureButton_Click(object sender, RoutedEventArgs e)
     {
-        StartHotkeyCapture(HotkeyCaptureButton, _viewModel.ApplyRecordingHotkey);
+        StartHotkeyCapture(HotkeyCaptureButton, _viewModel.ApplyRecordingHotkey, IsRecordingHotkeyAllowed);
     }
 
     private void PasteLastTranscriptHotkeyCaptureButton_Click(object sender, RoutedEventArgs e)
@@ -190,11 +199,7 @@ public sealed partial class MainWindow : Window
 
     private void ProviderRadioButton_Checked(object sender, RoutedEventArgs e)
     {
-        _viewModel.SelectedProvider = FireworksProviderRadioButton.IsChecked == true
-            ? TranscriptionProvider.Fireworks
-            : DeepgramProviderRadioButton.IsChecked == true
-                ? TranscriptionProvider.Deepgram
-                : TranscriptionProvider.Groq;
+        _viewModel.SelectedProvider = GetSelectedProviderFromControls();
         ApplyViewModelToControls();
         QueueAutoSave();
     }
@@ -249,6 +254,18 @@ public sealed partial class MainWindow : Window
         QueueAutoSave();
     }
 
+    private void MistralRealtimeToggle_Toggled(object sender, RoutedEventArgs e)
+    {
+        if (_isApplyingViewModel)
+        {
+            return;
+        }
+
+        _viewModel.MistralRealtimeEnabled = MistralRealtimeToggle.IsOn;
+        ApplyViewModelToControls();
+        QueueAutoSave();
+    }
+
     private void PushToTalkToggle_Toggled(object sender, RoutedEventArgs e)
     {
         QueueAutoSave();
@@ -264,78 +281,98 @@ public sealed partial class MainWindow : Window
         QueueAutoSave();
     }
 
-    private void TranscriptHistoryLimitNumberBox_ValueChanged(NumberBox sender, NumberBoxValueChangedEventArgs args)
+    private async void SaveTranscriptHistoryLimitButton_Click(object sender, RoutedEventArgs e)
     {
-        QueueAutoSave(NumberInputAutoSaveDelay);
-    }
+        var text = TranscriptHistoryLimitTextBox.Text?.Trim();
 
-    private async void TranscriptHistoryLimitNumberBox_KeyDown(object sender, KeyRoutedEventArgs e)
-    {
-        if (e.Key is not VirtualKey.Enter and not VirtualKey.Escape)
+        if (!TryParseTranscriptHistoryLimit(text, out var value))
         {
+            HideTranscriptHistorySavedIndicator();
+            await ShowInvalidTranscriptHistoryLimitDescriptionAsync();
             return;
         }
+
+        RestoreTranscriptHistoryLimitDescriptionText();
+        _viewModel.TranscriptHistoryLimitValue = value;
+        TranscriptHistoryLimitTextBox.Text = _viewModel.TranscriptHistoryLimit.ToString(CultureInfo.CurrentCulture);
+        _autoSaveCancellationTokenSource?.Cancel();
+
+        if (await SaveSettingsAsync(immediate: true))
+        {
+            await ShowTranscriptHistorySavedIndicatorAsync();
+        }
+    }
+
+    private static bool TryParseTranscriptHistoryLimit(string? text, out double value)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            value = 0;
+            return false;
+        }
+
+        var wasParsed = double.TryParse(text, NumberStyles.Float, CultureInfo.CurrentCulture, out value) ||
+                        double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out value);
+
+        return wasParsed && !double.IsNaN(value) && !double.IsInfinity(value);
+    }
+
+    private async Task ShowInvalidTranscriptHistoryLimitDescriptionAsync()
+    {
+        _transcriptHistoryValidationMessageCancellationTokenSource?.Cancel();
+        _transcriptHistoryValidationMessageCancellationTokenSource?.Dispose();
+        _transcriptHistoryValidationMessageCancellationTokenSource = new CancellationTokenSource();
+        var cancellationToken = _transcriptHistoryValidationMessageCancellationTokenSource.Token;
+
+        TranscriptHistoryLimitDescriptionTextBlock.Text = InvalidTranscriptHistoryLimitDescriptionText;
+        TranscriptHistoryLimitDescriptionTextBlock.Foreground = new SolidColorBrush(Color.FromArgb(255, 255, 0, 0));
 
         try
         {
-            DiagnosticsLogger.Info(
-                $"Transcript history limit keydown received. Key={e.Key}, Text='{TranscriptHistoryLimitNumberBox.Text}', Value={TranscriptHistoryLimitNumberBox.Value}.");
-
-            e.Handled = true;
-            CommitTranscriptHistoryLimitInput();
-
-            var focusMoved = OpenHistoryButton.Focus(FocusState.Programmatic);
-            DiagnosticsLogger.Info(
-                $"Transcript history limit focus move requested. Key={e.Key}, FocusMoved={focusMoved}, Text='{TranscriptHistoryLimitNumberBox.Text}', Value={TranscriptHistoryLimitNumberBox.Value}.");
-
-            _autoSaveCancellationTokenSource?.Cancel();
-            await SaveSettingsAsync(immediate: true);
+            await Task.Delay(TranscriptHistoryValidationMessageDuration, cancellationToken);
+            RestoreTranscriptHistoryLimitDescriptionText();
         }
-        catch (Exception exception)
+        catch (OperationCanceledException)
         {
-            DiagnosticsLogger.Error(
-                $"Transcript history limit key handling failed. Key={e.Key}, Text='{TranscriptHistoryLimitNumberBox.Text}', Value={TranscriptHistoryLimitNumberBox.Value}.",
-                exception);
-            ApplyViewModelToControls();
-            await ShowDialogAsync("Transcript history limit failed", exception.Message);
         }
     }
 
-    private void CommitTranscriptHistoryLimitInput()
+    private void RestoreTranscriptHistoryLimitDescriptionText()
     {
-        var text = TranscriptHistoryLimitNumberBox.Text?.Trim();
-        DiagnosticsLogger.Info($"Committing transcript history limit input. RawText='{text}', CurrentValue={TranscriptHistoryLimitNumberBox.Value}.");
-
-        if (string.IsNullOrWhiteSpace(text))
-        {
-            TranscriptHistoryLimitNumberBox.Value = _viewModel.TranscriptHistoryLimitValue;
-            DiagnosticsLogger.Info($"Transcript history limit input was blank. RestoredValue={TranscriptHistoryLimitNumberBox.Value}.");
-            return;
-        }
-
-        if (!double.TryParse(text, NumberStyles.Float, CultureInfo.CurrentCulture, out var value) &&
-            !double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out value))
-        {
-            TranscriptHistoryLimitNumberBox.Value = _viewModel.TranscriptHistoryLimitValue;
-            DiagnosticsLogger.Info($"Transcript history limit input could not be parsed. RestoredValue={TranscriptHistoryLimitNumberBox.Value}.");
-            return;
-        }
-
-        if (double.IsNaN(value) || double.IsInfinity(value))
-        {
-            TranscriptHistoryLimitNumberBox.Value = _viewModel.TranscriptHistoryLimitValue;
-            DiagnosticsLogger.Info($"Transcript history limit input was non-finite. RestoredValue={TranscriptHistoryLimitNumberBox.Value}.");
-            return;
-        }
-
-        TranscriptHistoryLimitNumberBox.Value = Math.Clamp(
-            value,
-            TranscriptHistoryLimitNumberBox.Minimum,
-            TranscriptHistoryLimitNumberBox.Maximum);
-        DiagnosticsLogger.Info($"Transcript history limit input committed. CommittedValue={TranscriptHistoryLimitNumberBox.Value}.");
+        TranscriptHistoryLimitDescriptionTextBlock.Text = TranscriptHistoryLimitDescriptionText;
+        TranscriptHistoryLimitDescriptionTextBlock.Foreground = (Brush)Application.Current.Resources["TextFillColorSecondaryBrush"];
     }
 
-    private void StartHotkeyCapture(Button button, Action<HotkeyBinding> onHotkeyCaptured)
+    private async Task ShowTranscriptHistorySavedIndicatorAsync()
+    {
+        _transcriptHistorySavedMessageCancellationTokenSource?.Cancel();
+        _transcriptHistorySavedMessageCancellationTokenSource?.Dispose();
+        _transcriptHistorySavedMessageCancellationTokenSource = new CancellationTokenSource();
+        var cancellationToken = _transcriptHistorySavedMessageCancellationTokenSource.Token;
+
+        TranscriptHistoryLimitSavedTextBlock.Visibility = Visibility.Visible;
+
+        try
+        {
+            await Task.Delay(TranscriptHistorySavedMessageDuration, cancellationToken);
+            HideTranscriptHistorySavedIndicator();
+        }
+        catch (OperationCanceledException)
+        {
+        }
+    }
+
+    private void HideTranscriptHistorySavedIndicator()
+    {
+        TranscriptHistoryLimitSavedTextBlock.Visibility = Visibility.Collapsed;
+    }
+
+    private static bool IsRecordingHotkeyAllowed(HotkeyBinding hotkey)
+    {
+        return hotkey.KeyCode is not 0x0D and not 0x1B;
+    }
+
+    private void StartHotkeyCapture(Button button, Action<HotkeyBinding> onHotkeyCaptured, Func<HotkeyBinding, bool>? hotkeyCaptureValidator = null)
     {
         if (_keyboardHookService is null)
         {
@@ -345,8 +382,9 @@ public sealed partial class MainWindow : Window
 
         SetHotkeyCaptureButtonsEnabled(false);
         button.Content = "Press hotkey...";
-        SetStatusText("Press the new hotkey now.");
-        _keyboardHookService.BeginHotkeyCapture(hotkey => HotkeyCaptured(button, hotkey, onHotkeyCaptured));
+        _keyboardHookService.BeginHotkeyCapture(
+            hotkey => HotkeyCaptured(button, hotkey, onHotkeyCaptured),
+            hotkeyCaptureValidator);
     }
 
     private async void HotkeyCaptured(Button button, HotkeyBinding hotkey, Action<HotkeyBinding> onHotkeyCaptured)
@@ -382,7 +420,7 @@ public sealed partial class MainWindow : Window
         _ = SaveSettingsAsync(immediate: false, cancellationToken, delay ?? DefaultAutoSaveDelay);
     }
 
-    private async Task SaveSettingsAsync(bool immediate, CancellationToken cancellationToken = default, TimeSpan? autoSaveDelay = null)
+    private async Task<bool> SaveSettingsAsync(bool immediate, CancellationToken cancellationToken = default, TimeSpan? autoSaveDelay = null)
     {
         try
         {
@@ -396,8 +434,9 @@ public sealed partial class MainWindow : Window
             try
             {
                 ApplyControlsToViewModel();
-                await _viewModel.SaveSettingsAsync();
+                var saved = await _viewModel.SaveSettingsAsync();
                 ApplyViewModelToControls();
+                return saved;
             }
             finally
             {
@@ -406,6 +445,7 @@ public sealed partial class MainWindow : Window
         }
         catch (OperationCanceledException)
         {
+            return false;
         }
         catch (Exception exception)
         {
@@ -413,24 +453,26 @@ public sealed partial class MainWindow : Window
             ApplyViewModelToControls();
             await ShowDialogAsync("Settings could not be saved", exception.Message);
         }
+
+        return false;
     }
 
     private void ApplyControlsToViewModel()
     {
         _viewModel.SelectedInputDevice = InputDeviceComboBox.SelectedItem as AudioInputDevice;
-        _viewModel.SelectedProvider = FireworksProviderRadioButton.IsChecked == true
-            ? TranscriptionProvider.Fireworks
-            : DeepgramProviderRadioButton.IsChecked == true
-                ? TranscriptionProvider.Deepgram
-                : TranscriptionProvider.Groq;
+        _viewModel.SelectedProvider = GetSelectedProviderFromControls();
         _viewModel.GroqApiKey = GroqApiKeyBox.Password;
         _viewModel.FireworksApiKey = FireworksApiKeyBox.Password;
         _viewModel.DeepgramApiKey = DeepgramApiKeyBox.Password;
+        _viewModel.MistralApiKey = MistralApiKeyBox.Password;
         _viewModel.DeepgramStreamingEnabled = DeepgramStreamingToggle.IsOn;
+        _viewModel.MistralRealtimeEnabled = MistralRealtimeToggle.IsOn;
+        _viewModel.MistralRealtimeMode = MistralRealtimeModeComboBox.SelectedIndex == 1
+            ? MistralRealtimeMode.Slow
+            : MistralRealtimeMode.Fast;
         _viewModel.PushToTalk = PushToTalkToggle.IsOn;
         _viewModel.LaunchAtStartup = LaunchAtStartupToggle.IsOn;
         _viewModel.SoundFeedbackEnabled = SoundFeedbackToggle.IsOn;
-        _viewModel.TranscriptHistoryLimitValue = TranscriptHistoryLimitNumberBox.Value;
         _viewModel.SelectedGroqModel = GroqModelComboBox.SelectedItem as string ?? _viewModel.AvailableGroqModels[0];
         _viewModel.GroqLanguage = GroqLanguageTextBox.Text;
         _viewModel.SelectedFireworksModel = FireworksModelComboBox.SelectedItem as string ?? _viewModel.AvailableFireworksModels[0];
@@ -438,26 +480,34 @@ public sealed partial class MainWindow : Window
         _viewModel.SelectedDeepgramModel = DeepgramModelComboBox.SelectedItem as string ?? _viewModel.AvailableDeepgramModels[0];
     }
 
-    private void RestoreStatusText()
+    private TranscriptionProvider GetSelectedProviderFromControls()
     {
-        StatusTextBlock.Text = _viewModel.StatusMessage;
-        StatusTextBlock.Foreground = (Brush)Application.Current.Resources["TextFillColorPrimaryBrush"];
-        StatusTextBlock.FontWeight = new Windows.UI.Text.FontWeight { Weight = 400 };
-        StatusTextBlock.Opacity = 1;
-        StatusTextBlock.Visibility = string.IsNullOrWhiteSpace(StatusTextBlock.Text)
-            ? Visibility.Collapsed
-            : Visibility.Visible;
+        if (MistralProviderRadioButton.IsChecked == true)
+        {
+            return TranscriptionProvider.Mistral;
+        }
+
+        if (DeepgramProviderRadioButton.IsChecked == true)
+        {
+            return TranscriptionProvider.Deepgram;
+        }
+
+        if (FireworksProviderRadioButton.IsChecked == true)
+        {
+            return TranscriptionProvider.Fireworks;
+        }
+
+        return TranscriptionProvider.Groq;
     }
 
-    private void SetStatusText(string message)
+    private void RestoreStatusText()
     {
-        StatusTextBlock.Text = message;
-        StatusTextBlock.Foreground = (Brush)Application.Current.Resources["TextFillColorPrimaryBrush"];
-        StatusTextBlock.FontWeight = new Windows.UI.Text.FontWeight { Weight = 400 };
-        StatusTextBlock.Opacity = 1;
-        StatusTextBlock.Visibility = string.IsNullOrWhiteSpace(message)
-            ? Visibility.Collapsed
-            : Visibility.Visible;
+        StatusTextBlock.Visibility = Visibility.Collapsed;
+    }
+
+    private void SetStatusText(string _)
+    {
+        StatusTextBlock.Visibility = Visibility.Collapsed;
     }
 
     private async Task ShowDialogAsync(string title, string message)
@@ -568,6 +618,10 @@ public sealed partial class MainWindow : Window
         RootGrid.ActualThemeChanged -= OnRootGridActualThemeChanged;
         _autoSaveCancellationTokenSource?.Cancel();
         _autoSaveCancellationTokenSource?.Dispose();
+        _transcriptHistorySavedMessageCancellationTokenSource?.Cancel();
+        _transcriptHistorySavedMessageCancellationTokenSource?.Dispose();
+        _transcriptHistoryValidationMessageCancellationTokenSource?.Cancel();
+        _transcriptHistoryValidationMessageCancellationTokenSource?.Dispose();
 
         if (_historyWindow is not null)
         {
