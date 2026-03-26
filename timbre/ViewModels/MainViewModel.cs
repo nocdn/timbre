@@ -52,7 +52,6 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private bool _pushToTalk = true;
     private bool _launchAtStartup;
     private bool _soundFeedbackEnabled = true;
-    private bool _restoreClipboard = true;
     private int _transcriptHistoryLimit = 200;
     private double _transcriptHistoryLimitValue = 200;
     private string _selectedGroqModel = GroqModels[0];
@@ -228,12 +227,6 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     {
         get => _soundFeedbackEnabled;
         set => SetProperty(ref _soundFeedbackEnabled, value);
-    }
-
-    public bool RestoreClipboard
-    {
-        get => _restoreClipboard;
-        set => SetProperty(ref _restoreClipboard, value);
     }
 
     public int TranscriptHistoryLimit
@@ -531,7 +524,6 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         PushToTalk = settings.PushToTalk;
         LaunchAtStartup = settings.LaunchAtStartup;
         SoundFeedbackEnabled = settings.SoundFeedbackEnabled;
-        RestoreClipboard = settings.RestoreClipboard;
         TranscriptHistoryLimit = settings.TranscriptHistoryLimit;
         TranscriptHistoryLimitValue = settings.TranscriptHistoryLimit;
         SelectedGroqModel = GroqModels.FirstOrDefault(model => model == settings.GroqModel) ?? GroqModels[0];
@@ -568,7 +560,6 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             PushToTalk = PushToTalk,
             LaunchAtStartup = LaunchAtStartup,
             SoundFeedbackEnabled = SoundFeedbackEnabled,
-            RestoreClipboard = RestoreClipboard,
             GroqModel = string.IsNullOrWhiteSpace(SelectedGroqModel) ? GroqModels[0] : SelectedGroqModel,
             GroqLanguage = NormalizeLanguage(GroqLanguage),
             FireworksModel = string.IsNullOrWhiteSpace(SelectedFireworksModel) ? FireworksModels[0] : SelectedFireworksModel,
@@ -685,7 +676,6 @@ public sealed class MainViewModel : ObservableObject, IDisposable
                left.PushToTalk == right.PushToTalk &&
                left.LaunchAtStartup == right.LaunchAtStartup &&
                left.SoundFeedbackEnabled == right.SoundFeedbackEnabled &&
-               left.RestoreClipboard == right.RestoreClipboard &&
                string.Equals(left.GroqModel, right.GroqModel, StringComparison.Ordinal) &&
                string.Equals(left.GroqLanguage, right.GroqLanguage, StringComparison.Ordinal) &&
                string.Equals(left.FireworksModel, right.FireworksModel, StringComparison.Ordinal) &&

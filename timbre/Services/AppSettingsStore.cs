@@ -91,7 +91,6 @@ public sealed class AppSettingsStore : IAppSettingsStore
                     ? "cohere-transcribe-03-2026"
                     : storedSettings.CohereModel,
                 CohereLanguage = NormalizeLanguage(storedSettings.CohereLanguage),
-                RestoreClipboard = storedSettings.RestoreClipboard ?? true,
                 HasCompletedInitialSetup = storedSettings.HasCompletedInitialSetup ?? false,
             };
 
@@ -150,7 +149,6 @@ public sealed class AppSettingsStore : IAppSettingsStore
                 MistralRealtimeMode = NormalizeMistralRealtimeMode(settings.MistralRealtimeMode),
                 CohereModel = string.IsNullOrWhiteSpace(settings.CohereModel) ? "cohere-transcribe-03-2026" : settings.CohereModel,
                 CohereLanguage = NormalizeLanguage(settings.CohereLanguage),
-                RestoreClipboard = settings.RestoreClipboard,
                 HasCompletedInitialSetup = settings.HasCompletedInitialSetup,
             };
 
@@ -183,7 +181,6 @@ public sealed class AppSettingsStore : IAppSettingsStore
                 MistralRealtimeMode = NormalizeMistralRealtimeMode(settings.MistralRealtimeMode),
                 CohereModel = string.IsNullOrWhiteSpace(settings.CohereModel) ? "cohere-transcribe-03-2026" : settings.CohereModel,
                 CohereLanguage = NormalizeLanguage(settings.CohereLanguage),
-                RestoreClipboard = settings.RestoreClipboard,
                 HasCompletedInitialSetup = settings.HasCompletedInitialSetup,
             };
             _hasLoadedSettings = true;
@@ -324,8 +321,6 @@ public sealed class AppSettingsStore : IAppSettingsStore
         public string? CohereModel { get; set; }
 
         public string? CohereLanguage { get; set; }
-
-        public bool? RestoreClipboard { get; set; }
 
         public bool? HasCompletedInitialSetup { get; set; }
     }

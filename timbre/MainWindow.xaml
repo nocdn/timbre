@@ -125,17 +125,6 @@
                         </StackPanel>
 
                         <StackPanel Spacing="6">
-                            <ToggleSwitch
-                                x:Name="RestoreClipboardToggle"
-                                Toggled="RestoreClipboardToggle_Toggled"
-                                Header="Restore clipboard" />
-                            <TextBlock
-                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                Text="When on, the original clipboard content is automatically restored after pasting the transcript."
-                                TextWrapping="WrapWholeWords" />
-                        </StackPanel>
-
-                        <StackPanel Spacing="6">
                             <TextBlock
                                 Text="Provider"
                                 Style="{ThemeResource SubtitleTextBlockStyle}" />

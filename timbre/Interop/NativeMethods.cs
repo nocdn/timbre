@@ -40,6 +40,7 @@ internal static class NativeMethods
     public const uint VK_CONTROL = 0x11;
     public const uint VK_SHIFT = 0x10;
     public const uint VK_MENU = 0x12;
+    public const uint VK_RETURN = 0x0D;
     public const uint VK_V = 0x56;
     public const uint VK_SPACE = 0x20;
     public const uint VK_LCONTROL = 0xA2;
@@ -52,6 +53,7 @@ internal static class NativeMethods
     public const uint VK_RWIN = 0x5C;
 
     public const uint KEYEVENTF_KEYUP = 0x0002;
+    public const uint KEYEVENTF_UNICODE = 0x0004;
     public const int INPUT_KEYBOARD = 1;
     public const uint CF_UNICODETEXT = 13;
     public const uint GMEM_MOVEABLE = 0x0002;

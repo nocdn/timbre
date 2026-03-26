@@ -125,7 +125,6 @@ public sealed partial class MainWindow : Window
             PushToTalkToggle.IsOn = _viewModel.PushToTalk;
             LaunchAtStartupToggle.IsOn = _viewModel.LaunchAtStartup;
             SoundFeedbackToggle.IsOn = _viewModel.SoundFeedbackEnabled;
-            RestoreClipboardToggle.IsOn = _viewModel.RestoreClipboard;
             GroqApiKeyBox.Password = _viewModel.GroqApiKey;
             GroqModelComboBox.ItemsSource = _viewModel.AvailableGroqModels;
             GroqModelComboBox.SelectedItem = _viewModel.SelectedGroqModel;
@@ -284,11 +283,6 @@ public sealed partial class MainWindow : Window
     }
 
     private void SoundFeedbackToggle_Toggled(object sender, RoutedEventArgs e)
-    {
-        QueueAutoSave();
-    }
-
-    private void RestoreClipboardToggle_Toggled(object sender, RoutedEventArgs e)
     {
         QueueAutoSave();
     }
@@ -486,7 +480,6 @@ public sealed partial class MainWindow : Window
         _viewModel.PushToTalk = PushToTalkToggle.IsOn;
         _viewModel.LaunchAtStartup = LaunchAtStartupToggle.IsOn;
         _viewModel.SoundFeedbackEnabled = SoundFeedbackToggle.IsOn;
-        _viewModel.RestoreClipboard = RestoreClipboardToggle.IsOn;
         _viewModel.SelectedGroqModel = GroqModelComboBox.SelectedItem as string ?? _viewModel.AvailableGroqModels[0];
         _viewModel.GroqLanguage = GroqLanguageTextBox.Text;
         _viewModel.SelectedFireworksModel = FireworksModelComboBox.SelectedItem as string ?? _viewModel.AvailableFireworksModels[0];

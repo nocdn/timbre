@@ -51,6 +51,9 @@ public static class Program
         services.AddSingleton<ITranscriptHistoryStore, TranscriptHistoryStore>();
         services.AddSingleton<INotificationService, NotificationService>();
         services.AddSingleton<IClipboardPasteService, ClipboardPasteService>();
+        services.AddSingleton<IUiAutomationDirectTextInsertionService, UiAutomationDirectTextInsertionService>();
+        services.AddSingleton<IUnicodeTextTypingService, UnicodeTextTypingService>();
+        services.AddSingleton<ITextInsertionService, TextInsertionService>();
         services.AddSingleton<ILaunchAtStartupService, LaunchAtStartupService>();
         services.AddSingleton<IAudioFeedbackService, AudioFeedbackService>();
         services.AddSingleton<GroqTranscriptionClient>(_ =>

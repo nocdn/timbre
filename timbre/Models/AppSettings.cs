@@ -52,7 +52,5 @@ public sealed class AppSettings
 
     public string CohereLanguage { get; init; } = "en";
 
-    public bool RestoreClipboard { get; init; } = true;
-
     public bool HasCompletedInitialSetup { get; init; }
 }
