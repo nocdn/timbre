@@ -1,4 +1,4 @@
-﻿namespace timbre.Models;
+namespace timbre.Models;
 
 public enum TranscriptionProvider
 {
@@ -6,4 +6,5 @@ public enum TranscriptionProvider
     Fireworks,
     Deepgram,
     Mistral,
+    Cohere,
 }

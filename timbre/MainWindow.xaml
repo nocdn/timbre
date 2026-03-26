@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <Window
     x:Class="timbre.MainWindow"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
@@ -125,6 +125,17 @@
                         </StackPanel>
 
                         <StackPanel Spacing="6">
+                            <ToggleSwitch
+                                x:Name="RestoreClipboardToggle"
+                                Toggled="RestoreClipboardToggle_Toggled"
+                                Header="Restore clipboard" />
+                            <TextBlock
+                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                Text="When on, the original clipboard content is automatically restored after pasting the transcript."
+                                TextWrapping="WrapWholeWords" />
+                        </StackPanel>
+
+                        <StackPanel Spacing="6">
                             <TextBlock
                                 Text="Provider"
                                 Style="{ThemeResource SubtitleTextBlockStyle}" />
@@ -148,6 +159,11 @@
                                     x:Name="MistralProviderRadioButton"
                                     Checked="ProviderRadioButton_Checked"
                                     Content="Mistral"
+                                    GroupName="ProviderGroup" />
+                                <RadioButton
+                                    x:Name="CohereProviderRadioButton"
+                                    Checked="ProviderRadioButton_Checked"
+                                    Content="Cohere"
                                     GroupName="ProviderGroup" />
                             </StackPanel>
                         </StackPanel>
@@ -278,6 +294,38 @@
                             Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                             Text="When realtime is off, Timbre uploads the finished recording to Voxtral Mini Transcribe. When realtime is on, Timbre streams 16 kHz PCM audio to Voxtral Mini Transcribe Realtime and pastes transcript chunks live while you record. Fast stream uses a 240 ms target delay. Slow stream uses a 2400 ms target delay for steadier chunks. Docs: https://docs.mistral.ai/capabilities/audio_transcription/offline_transcription and https://docs.mistral.ai/capabilities/audio_transcription/realtime_transcription"
                             TextWrapping="WrapWholeWords" />
+                    </StackPanel>
+                </StackPanel>
+
+                <StackPanel
+                    x:Name="CohereSettingsPanel"
+                    Spacing="14">
+                    <TextBlock
+                        Text="Cohere settings"
+                        Style="{ThemeResource SubtitleTextBlockStyle}" />
+                    <StackPanel Spacing="14">
+                        <PasswordBox
+                            x:Name="CohereApiKeyBox"
+                            PasswordChanged="SettingsPasswordBox_PasswordChanged"
+                            Header="Cohere API key" />
+
+                        <ComboBox
+                            x:Name="CohereModelComboBox"
+                            SelectionChanged="SettingsComboBox_SelectionChanged"
+                            Header="Cohere model"
+                            PlaceholderText="Select a Cohere model" />
+
+                        <StackPanel Spacing="6">
+                            <TextBox
+                                x:Name="CohereLanguageTextBox"
+                                Header="Language"
+                                TextChanged="SettingsTextBox_TextChanged"
+                                PlaceholderText="en" />
+                            <TextBlock
+                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                Text="Use an ISO-639-1 code like 'en'. Cohere requires an explicit language value. Docs: https://docs.cohere.com/reference/create-audio-transcription"
+                                TextWrapping="WrapWholeWords" />
+                        </StackPanel>
                     </StackPanel>
                 </StackPanel>
 

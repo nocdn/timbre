@@ -336,4 +336,13 @@ internal static class NativeMethods
 
     [DllImport("dwmapi.dll", PreserveSig = true)]
     public static extern int DwmSetWindowAttribute(IntPtr hwnd, int dwAttribute, ref uint pvAttribute, int cbAttribute);
+
+    [DllImport("ole32.dll", ExactSpelling = true, PreserveSig = false)]
+    public static extern void OleGetClipboard(out System.Runtime.InteropServices.ComTypes.IDataObject dataObject);
+
+    [DllImport("ole32.dll", ExactSpelling = true, PreserveSig = false)]
+    public static extern void OleSetClipboard(System.Runtime.InteropServices.ComTypes.IDataObject dataObject);
+
+    [DllImport("ole32.dll", ExactSpelling = true, PreserveSig = false)]
+    public static extern void OleFlushClipboard();
 }

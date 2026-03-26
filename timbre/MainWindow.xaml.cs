@@ -117,6 +117,7 @@ public sealed partial class MainWindow : Window
             FireworksProviderRadioButton.IsChecked = _viewModel.IsFireworksSelected;
             DeepgramProviderRadioButton.IsChecked = _viewModel.IsDeepgramSelected;
             MistralProviderRadioButton.IsChecked = _viewModel.IsMistralSelected;
+            CohereProviderRadioButton.IsChecked = _viewModel.IsCohereSelected;
             HotkeyCaptureButton.Content = _viewModel.RecordingHotkeyDisplay;
             PasteLastTranscriptHotkeyCaptureButton.Content = _viewModel.PasteLastTranscriptHotkeyDisplay;
             OpenHistoryHotkeyCaptureButton.Content = _viewModel.OpenHistoryHotkeyDisplay;
@@ -124,6 +125,7 @@ public sealed partial class MainWindow : Window
             PushToTalkToggle.IsOn = _viewModel.PushToTalk;
             LaunchAtStartupToggle.IsOn = _viewModel.LaunchAtStartup;
             SoundFeedbackToggle.IsOn = _viewModel.SoundFeedbackEnabled;
+            RestoreClipboardToggle.IsOn = _viewModel.RestoreClipboard;
             GroqApiKeyBox.Password = _viewModel.GroqApiKey;
             GroqModelComboBox.ItemsSource = _viewModel.AvailableGroqModels;
             GroqModelComboBox.SelectedItem = _viewModel.SelectedGroqModel;
@@ -140,10 +142,15 @@ public sealed partial class MainWindow : Window
             MistralRealtimeToggle.IsOn = _viewModel.MistralRealtimeEnabled;
             MistralRealtimeModeComboBox.SelectedIndex = _viewModel.MistralRealtimeMode == MistralRealtimeMode.Slow ? 1 : 0;
             MistralRealtimeModeComboBox.IsEnabled = _viewModel.MistralRealtimeEnabled;
+            CohereApiKeyBox.Password = _viewModel.CohereApiKey;
+            CohereModelComboBox.ItemsSource = _viewModel.AvailableCohereModels;
+            CohereModelComboBox.SelectedItem = _viewModel.SelectedCohereModel;
+            CohereLanguageTextBox.Text = _viewModel.CohereLanguage;
             GroqSettingsPanel.Visibility = _viewModel.GroqSettingsVisibility;
             FireworksSettingsPanel.Visibility = _viewModel.FireworksSettingsVisibility;
             DeepgramSettingsPanel.Visibility = _viewModel.DeepgramSettingsVisibility;
             MistralSettingsPanel.Visibility = _viewModel.MistralSettingsVisibility;
+            CohereSettingsPanel.Visibility = _viewModel.CohereSettingsVisibility;
             RestoreStatusText();
             HotkeyWarningTextBlock.Text = _viewModel.HotkeyWarningMessage;
             HotkeyWarningTextBlock.Visibility = _viewModel.HotkeyWarningVisibility;
@@ -277,6 +284,11 @@ public sealed partial class MainWindow : Window
     }
 
     private void SoundFeedbackToggle_Toggled(object sender, RoutedEventArgs e)
+    {
+        QueueAutoSave();
+    }
+
+    private void RestoreClipboardToggle_Toggled(object sender, RoutedEventArgs e)
     {
         QueueAutoSave();
     }
@@ -465,6 +477,7 @@ public sealed partial class MainWindow : Window
         _viewModel.FireworksApiKey = FireworksApiKeyBox.Password;
         _viewModel.DeepgramApiKey = DeepgramApiKeyBox.Password;
         _viewModel.MistralApiKey = MistralApiKeyBox.Password;
+        _viewModel.CohereApiKey = CohereApiKeyBox.Password;
         _viewModel.DeepgramStreamingEnabled = DeepgramStreamingToggle.IsOn;
         _viewModel.MistralRealtimeEnabled = MistralRealtimeToggle.IsOn;
         _viewModel.MistralRealtimeMode = MistralRealtimeModeComboBox.SelectedIndex == 1
@@ -473,11 +486,14 @@ public sealed partial class MainWindow : Window
         _viewModel.PushToTalk = PushToTalkToggle.IsOn;
         _viewModel.LaunchAtStartup = LaunchAtStartupToggle.IsOn;
         _viewModel.SoundFeedbackEnabled = SoundFeedbackToggle.IsOn;
+        _viewModel.RestoreClipboard = RestoreClipboardToggle.IsOn;
         _viewModel.SelectedGroqModel = GroqModelComboBox.SelectedItem as string ?? _viewModel.AvailableGroqModels[0];
         _viewModel.GroqLanguage = GroqLanguageTextBox.Text;
         _viewModel.SelectedFireworksModel = FireworksModelComboBox.SelectedItem as string ?? _viewModel.AvailableFireworksModels[0];
         _viewModel.FireworksLanguage = FireworksLanguageTextBox.Text;
         _viewModel.SelectedDeepgramModel = DeepgramModelComboBox.SelectedItem as string ?? _viewModel.AvailableDeepgramModels[0];
+        _viewModel.SelectedCohereModel = CohereModelComboBox.SelectedItem as string ?? _viewModel.AvailableCohereModels[0];
+        _viewModel.CohereLanguage = CohereLanguageTextBox.Text;
     }
 
     private TranscriptionProvider GetSelectedProviderFromControls()
@@ -485,6 +501,11 @@ public sealed partial class MainWindow : Window
         if (MistralProviderRadioButton.IsChecked == true)
         {
             return TranscriptionProvider.Mistral;
+        }
+
+        if (CohereProviderRadioButton.IsChecked == true)
+        {
+            return TranscriptionProvider.Cohere;
         }
 
         if (DeepgramProviderRadioButton.IsChecked == true)

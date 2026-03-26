@@ -1,4 +1,4 @@
-﻿namespace timbre.Models;
+namespace timbre.Models;
 
 public sealed class AppSettings
 {
@@ -13,6 +13,8 @@ public sealed class AppSettings
     public string? DeepgramApiKey { get; init; }
 
     public string? MistralApiKey { get; init; }
+
+    public string? CohereApiKey { get; init; }
 
     public HotkeyBinding Hotkey { get; init; } = HotkeyBinding.Default;
 
@@ -45,6 +47,12 @@ public sealed class AppSettings
     public bool MistralRealtimeEnabled { get; init; }
 
     public MistralRealtimeMode MistralRealtimeMode { get; init; } = MistralRealtimeMode.Fast;
+
+    public string CohereModel { get; init; } = "cohere-transcribe-03-2026";
+
+    public string CohereLanguage { get; init; } = "en";
+
+    public bool RestoreClipboard { get; init; } = true;
 
     public bool HasCompletedInitialSetup { get; init; }
 }

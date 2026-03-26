@@ -1,4 +1,4 @@
-﻿using System.Runtime.InteropServices;
+using System.Runtime.InteropServices;
 using System.Threading;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.UI.Dispatching;
@@ -84,6 +84,14 @@ public static class Program
                 Timeout = TimeSpan.FromMinutes(2),
             };
             return new MistralTranscriptionClient(httpClient);
+        });
+        services.AddSingleton<CohereTranscriptionClient>(_ =>
+        {
+            var httpClient = new HttpClient
+            {
+                Timeout = TimeSpan.FromMinutes(2),
+            };
+            return new CohereTranscriptionClient(httpClient);
         });
         services.AddSingleton<DeepgramStreamingTranscriptionClient>();
         services.AddSingleton<MistralRealtimeTranscriptionClient>();

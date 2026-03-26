@@ -5,6 +5,8 @@ VisualStudioVersion = 17.0.31903.59
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "timbre", "timbre\timbre.csproj", "{5B22CA23-084C-43BA-B55E-B4C79CDF4C61}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "timbre.tests", "timbre.tests\timbre.tests.csproj", "{28714A86-EE70-4A2A-9A5B-6942F252A05C}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|x64 = Debug|x64
@@ -18,5 +20,9 @@ Global
 		{5B22CA23-084C-43BA-B55E-B4C79CDF4C61}.Debug|x64.Build.0 = Debug|x64
 		{5B22CA23-084C-43BA-B55E-B4C79CDF4C61}.Release|x64.ActiveCfg = Release|x64
 		{5B22CA23-084C-43BA-B55E-B4C79CDF4C61}.Release|x64.Build.0 = Release|x64
+		{28714A86-EE70-4A2A-9A5B-6942F252A05C}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{28714A86-EE70-4A2A-9A5B-6942F252A05C}.Debug|x64.Build.0 = Debug|Any CPU
+		{28714A86-EE70-4A2A-9A5B-6942F252A05C}.Release|x64.ActiveCfg = Release|Any CPU
+		{28714A86-EE70-4A2A-9A5B-6942F252A05C}.Release|x64.Build.0 = Release|Any CPU
 	EndGlobalSection
 EndGlobal

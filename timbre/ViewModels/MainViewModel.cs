@@ -1,4 +1,4 @@
-﻿using System.Collections.ObjectModel;
+using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using Microsoft.UI.Xaml;
 using timbre.Interfaces;
@@ -27,6 +27,10 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     [
         "nova-3",
     ];
+    private static readonly string[] CohereModels =
+    [
+        "cohere-transcribe-03-2026",
+    ];
 
     private readonly IAppSettingsStore _settingsStore;
     private readonly IAudioDeviceService _audioDeviceService;
@@ -42,11 +46,13 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private string _fireworksApiKey = string.Empty;
     private string _deepgramApiKey = string.Empty;
     private string _mistralApiKey = string.Empty;
+    private string _cohereApiKey = string.Empty;
     private bool _deepgramStreamingEnabled = true;
     private bool _mistralRealtimeEnabled;
     private bool _pushToTalk = true;
     private bool _launchAtStartup;
     private bool _soundFeedbackEnabled = true;
+    private bool _restoreClipboard = true;
     private int _transcriptHistoryLimit = 200;
     private double _transcriptHistoryLimitValue = 200;
     private string _selectedGroqModel = GroqModels[0];
@@ -55,6 +61,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private string _fireworksLanguage = "en";
     private string _selectedDeepgramModel = DeepgramStreamingModels[0];
     private MistralRealtimeMode _mistralRealtimeMode = MistralRealtimeMode.Fast;
+    private string _selectedCohereModel = CohereModels[0];
+    private string _cohereLanguage = "en";
     private string _recordingHotkeyDisplay = HotkeyBinding.Default.ToDisplayString();
     private string _pasteLastTranscriptHotkeyDisplay = HotkeyBinding.PasteLastTranscriptDefault.ToDisplayString();
     private string _openHistoryHotkeyDisplay = HotkeyBinding.OpenHistoryDefault.ToDisplayString();
@@ -101,6 +109,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
     public IReadOnlyList<string> AvailableDeepgramModels => DeepgramStreamingEnabled ? DeepgramStreamingModels : DeepgramBatchModels;
 
+    public IReadOnlyList<string> AvailableCohereModels => CohereModels;
+
     public TranscriptionProvider SelectedProvider
     {
         get => _selectedProvider;
@@ -112,10 +122,12 @@ public sealed class MainViewModel : ObservableObject, IDisposable
                 OnPropertyChanged(nameof(IsFireworksSelected));
                 OnPropertyChanged(nameof(IsDeepgramSelected));
                 OnPropertyChanged(nameof(IsMistralSelected));
+                OnPropertyChanged(nameof(IsCohereSelected));
                 OnPropertyChanged(nameof(GroqSettingsVisibility));
                 OnPropertyChanged(nameof(FireworksSettingsVisibility));
                 OnPropertyChanged(nameof(DeepgramSettingsVisibility));
                 OnPropertyChanged(nameof(MistralSettingsVisibility));
+                OnPropertyChanged(nameof(CohereSettingsVisibility));
             }
         }
     }
@@ -128,6 +140,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
     public bool IsMistralSelected => SelectedProvider == TranscriptionProvider.Mistral;
 
+    public bool IsCohereSelected => SelectedProvider == TranscriptionProvider.Cohere;
+
     public Visibility GroqSettingsVisibility => IsGroqSelected ? Visibility.Visible : Visibility.Collapsed;
 
     public Visibility FireworksSettingsVisibility => IsFireworksSelected ? Visibility.Visible : Visibility.Collapsed;
@@ -135,6 +149,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     public Visibility DeepgramSettingsVisibility => IsDeepgramSelected ? Visibility.Visible : Visibility.Collapsed;
 
     public Visibility MistralSettingsVisibility => IsMistralSelected ? Visibility.Visible : Visibility.Collapsed;
+
+    public Visibility CohereSettingsVisibility => IsCohereSelected ? Visibility.Visible : Visibility.Collapsed;
 
     public AudioInputDevice? SelectedInputDevice
     {
@@ -164,6 +180,12 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     {
         get => _mistralApiKey;
         set => SetProperty(ref _mistralApiKey, value);
+    }
+
+    public string CohereApiKey
+    {
+        get => _cohereApiKey;
+        set => SetProperty(ref _cohereApiKey, value);
     }
 
     public bool DeepgramStreamingEnabled
@@ -206,6 +228,12 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     {
         get => _soundFeedbackEnabled;
         set => SetProperty(ref _soundFeedbackEnabled, value);
+    }
+
+    public bool RestoreClipboard
+    {
+        get => _restoreClipboard;
+        set => SetProperty(ref _restoreClipboard, value);
     }
 
     public int TranscriptHistoryLimit
@@ -260,6 +288,18 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     {
         get => _mistralRealtimeMode;
         set => SetProperty(ref _mistralRealtimeMode, value);
+    }
+
+    public string SelectedCohereModel
+    {
+        get => _selectedCohereModel;
+        set => SetProperty(ref _selectedCohereModel, value);
+    }
+
+    public string CohereLanguage
+    {
+        get => _cohereLanguage;
+        set => SetProperty(ref _cohereLanguage, value);
     }
 
     public string RecordingHotkeyDisplay
@@ -484,12 +524,14 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         FireworksApiKey = settings.FireworksApiKey ?? string.Empty;
         DeepgramApiKey = settings.DeepgramApiKey ?? string.Empty;
         MistralApiKey = settings.MistralApiKey ?? string.Empty;
+        CohereApiKey = settings.CohereApiKey ?? string.Empty;
         DeepgramStreamingEnabled = settings.DeepgramStreamingEnabled;
         MistralRealtimeEnabled = settings.MistralRealtimeEnabled;
         MistralRealtimeMode = settings.MistralRealtimeMode;
         PushToTalk = settings.PushToTalk;
         LaunchAtStartup = settings.LaunchAtStartup;
         SoundFeedbackEnabled = settings.SoundFeedbackEnabled;
+        RestoreClipboard = settings.RestoreClipboard;
         TranscriptHistoryLimit = settings.TranscriptHistoryLimit;
         TranscriptHistoryLimitValue = settings.TranscriptHistoryLimit;
         SelectedGroqModel = GroqModels.FirstOrDefault(model => model == settings.GroqModel) ?? GroqModels[0];
@@ -497,6 +539,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         SelectedFireworksModel = FireworksModels.FirstOrDefault(model => model == settings.FireworksModel) ?? FireworksModels[0];
         FireworksLanguage = NormalizeLanguage(settings.FireworksLanguage);
         SelectedDeepgramModel = AvailableDeepgramModels.FirstOrDefault(model => model == settings.DeepgramModel) ?? GetDefaultDeepgramModel(settings.DeepgramStreamingEnabled);
+        SelectedCohereModel = CohereModels.FirstOrDefault(model => model == settings.CohereModel) ?? CohereModels[0];
+        CohereLanguage = NormalizeLanguage(settings.CohereLanguage);
         _pendingHotkey = settings.Hotkey;
         _pendingPasteLastTranscriptHotkey = settings.PasteLastTranscriptHotkey;
         _pendingOpenHistoryHotkey = settings.OpenHistoryHotkey;
@@ -516,6 +560,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             FireworksApiKey = FireworksApiKey.Trim(),
             DeepgramApiKey = DeepgramApiKey.Trim(),
             MistralApiKey = MistralApiKey.Trim(),
+            CohereApiKey = CohereApiKey.Trim(),
             Hotkey = _pendingHotkey,
             PasteLastTranscriptHotkey = _pendingPasteLastTranscriptHotkey,
             OpenHistoryHotkey = _pendingOpenHistoryHotkey,
@@ -523,6 +568,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             PushToTalk = PushToTalk,
             LaunchAtStartup = LaunchAtStartup,
             SoundFeedbackEnabled = SoundFeedbackEnabled,
+            RestoreClipboard = RestoreClipboard,
             GroqModel = string.IsNullOrWhiteSpace(SelectedGroqModel) ? GroqModels[0] : SelectedGroqModel,
             GroqLanguage = NormalizeLanguage(GroqLanguage),
             FireworksModel = string.IsNullOrWhiteSpace(SelectedFireworksModel) ? FireworksModels[0] : SelectedFireworksModel,
@@ -532,6 +578,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             DeepgramStreamingEnabled = DeepgramStreamingEnabled,
             MistralRealtimeEnabled = MistralRealtimeEnabled,
             MistralRealtimeMode = MistralRealtimeMode,
+            CohereModel = string.IsNullOrWhiteSpace(SelectedCohereModel) ? CohereModels[0] : SelectedCohereModel,
+            CohereLanguage = NormalizeLanguage(CohereLanguage),
             HasCompletedInitialSetup = true,
         };
     }
@@ -629,6 +677,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
                string.Equals(left.FireworksApiKey, right.FireworksApiKey, StringComparison.Ordinal) &&
                string.Equals(left.DeepgramApiKey, right.DeepgramApiKey, StringComparison.Ordinal) &&
                string.Equals(left.MistralApiKey, right.MistralApiKey, StringComparison.Ordinal) &&
+               string.Equals(left.CohereApiKey, right.CohereApiKey, StringComparison.Ordinal) &&
                Equals(left.Hotkey, right.Hotkey) &&
                Equals(left.PasteLastTranscriptHotkey, right.PasteLastTranscriptHotkey) &&
                Equals(left.OpenHistoryHotkey, right.OpenHistoryHotkey) &&
@@ -636,6 +685,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
                left.PushToTalk == right.PushToTalk &&
                left.LaunchAtStartup == right.LaunchAtStartup &&
                left.SoundFeedbackEnabled == right.SoundFeedbackEnabled &&
+               left.RestoreClipboard == right.RestoreClipboard &&
                string.Equals(left.GroqModel, right.GroqModel, StringComparison.Ordinal) &&
                string.Equals(left.GroqLanguage, right.GroqLanguage, StringComparison.Ordinal) &&
                string.Equals(left.FireworksModel, right.FireworksModel, StringComparison.Ordinal) &&
@@ -645,6 +695,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
                left.DeepgramStreamingEnabled == right.DeepgramStreamingEnabled &&
                left.MistralRealtimeEnabled == right.MistralRealtimeEnabled &&
                left.MistralRealtimeMode == right.MistralRealtimeMode &&
+               string.Equals(left.CohereModel, right.CohereModel, StringComparison.Ordinal) &&
+               string.Equals(left.CohereLanguage, right.CohereLanguage, StringComparison.Ordinal) &&
                left.HasCompletedInitialSetup == right.HasCompletedInitialSetup;
     }
 

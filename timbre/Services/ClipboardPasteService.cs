@@ -1,5 +1,6 @@
 ﻿using System.ComponentModel;
 using System.Runtime.InteropServices;
+using System.Runtime.InteropServices.ComTypes;
 using System.Text;
 using timbre.Interfaces;
 using timbre.Interop;
@@ -10,6 +11,7 @@ namespace timbre.Services;
 public sealed class ClipboardPasteService : IClipboardPasteService
 {
     private readonly IUiDispatcherQueueAccessor _dispatcherQueueAccessor;
+    private IDataObject? _clipboardBackup;
 
     public ClipboardPasteService(IUiDispatcherQueueAccessor dispatcherQueueAccessor)
     {
@@ -59,6 +61,99 @@ public sealed class ClipboardPasteService : IClipboardPasteService
             {
                 DiagnosticsLogger.Info("SendInput returned Win32 error 87. Falling back to WM_PASTE.");
                 SendPasteMessage();
+            }
+        });
+    }
+
+    public Task BackupClipboardAsync(CancellationToken cancellationToken = default)
+    {
+        return RunOnUiThreadAsync(async () =>
+        {
+            DiagnosticsLogger.Info("BackupClipboardAsync: Attempting to backup clipboard.");
+            for (var attempt = 1; attempt <= 10; attempt++)
+            {
+                try
+                {
+                    NativeMethods.OleGetClipboard(out var backup);
+                    if (backup != null)
+                    {
+                        _clipboardBackup = backup;
+                        DiagnosticsLogger.Info("BackupClipboardAsync: Clipboard successfully backed up.");
+                        return;
+                    }
+                    else
+                    {
+                        DiagnosticsLogger.Info($"BackupClipboardAsync: OleGetClipboard returned null on attempt {attempt}.");
+                    }
+                }
+                catch (COMException exception)
+                {
+                    DiagnosticsLogger.Info($"BackupClipboardAsync: Attempt {attempt} failed ({exception.Message}).");
+                }
+                catch (Exception exception)
+                {
+                    DiagnosticsLogger.Error("BackupClipboardAsync: Unexpected exception occurred.", exception);
+                    break;
+                }
+
+                if (attempt < 10)
+                {
+                    await Task.Delay(40, cancellationToken);
+                }
+            }
+
+            DiagnosticsLogger.Error("BackupClipboardAsync: Failed to backup clipboard after 10 attempts.", new InvalidOperationException("Clipboard backup failed."));
+            _clipboardBackup = null;
+        });
+    }
+
+    public Task RestoreClipboardAsync(CancellationToken cancellationToken = default)
+    {
+        return RunOnUiThreadAsync(async () =>
+        {
+            DiagnosticsLogger.Info("RestoreClipboardAsync: Attempting to restore clipboard.");
+            if (_clipboardBackup is null)
+            {
+                DiagnosticsLogger.Info("RestoreClipboardAsync: No clipboard backup exists. Skipping restore.");
+                return;
+            }
+
+            try
+            {
+                for (var attempt = 1; attempt <= 10; attempt++)
+                {
+                    try
+                    {
+                        NativeMethods.OleSetClipboard(_clipboardBackup);
+                        // We purposely DO NOT call OleFlushClipboard here. 
+                        // Flushing forces the OS to render all formats to HGLOBALs, which then get destroyed 
+                        // during the next dictation's EmptyClipboard(), breaking subsequent backups.
+                        DiagnosticsLogger.Info($"RestoreClipboardAsync: Clipboard successfully restored from backup on attempt {attempt}.");
+                        return;
+                    }
+                    catch (COMException exception)
+                    {
+                        DiagnosticsLogger.Info($"RestoreClipboardAsync: Attempt {attempt} failed ({exception.Message}).");
+                        if (attempt == 10)
+                        {
+                            DiagnosticsLogger.Error("RestoreClipboardAsync: Failed to restore clipboard after 10 attempts.", exception);
+                        }
+                    }
+                    catch (Exception exception)
+                    {
+                        DiagnosticsLogger.Error("RestoreClipboardAsync: Unexpected exception occurred.", exception);
+                        break;
+                    }
+
+                    if (attempt < 10)
+                    {
+                        await Task.Delay(40, cancellationToken);
+                    }
+                }
+            }
+            finally
+            {
+                _clipboardBackup = null;
             }
         });
     }

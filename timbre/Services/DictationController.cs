@@ -84,6 +84,11 @@ public sealed class DictationController : IDictationController
                 return false;
             }
 
+            if (UsesRealtimeStreaming(settings) && settings.RestoreClipboard)
+            {
+                await _clipboardPasteService.BackupClipboardAsync();
+            }
+
             var recorder = new AudioRecorder();
             IRealtimeTranscriptionSession? streamingSession = null;
             CancellationTokenSource? transcriptionCancellationTokenSource = null;
@@ -93,6 +98,11 @@ public sealed class DictationController : IDictationController
                 if (UsesRealtimeStreaming(settings))
                 {
                     DiagnosticsLogger.Info($"Preparing {GetProviderDisplayName(settings.Provider)} live streaming session before microphone start.");
+                    if (settings.RestoreClipboard)
+                    {
+                        await _clipboardPasteService.BackupClipboardAsync();
+                    }
+
                     transcriptionCancellationTokenSource = new CancellationTokenSource();
                     ResetStreamingFailure();
                     streamingSession = await CreateRealtimeStreamingSessionAsync(settings, transcriptionCancellationTokenSource.Token);
@@ -121,6 +131,11 @@ public sealed class DictationController : IDictationController
                 if (streamingSession is not null)
                 {
                     await streamingSession.DisposeAsync();
+                }
+
+                if (settings.RestoreClipboard)
+                {
+                    await _clipboardPasteService.RestoreClipboardAsync();
                 }
 
                 transcriptionCancellationTokenSource?.Cancel();
@@ -182,6 +197,11 @@ public sealed class DictationController : IDictationController
             }
             catch (Exception exception)
             {
+                if (_settingsStore.CurrentSettings.RestoreClipboard)
+                {
+                    await _clipboardPasteService.RestoreClipboardAsync();
+                }
+
                 PublishStatus(DictationState.Error, exception.Message, false);
                 _notificationService.ShowNotification("Recording failed", exception.Message, true);
                 return true;
@@ -189,6 +209,11 @@ public sealed class DictationController : IDictationController
 
             if (audioBytes.Length == 0)
             {
+                if (_settingsStore.CurrentSettings.RestoreClipboard)
+                {
+                    await _clipboardPasteService.RestoreClipboardAsync();
+                }
+
                 PublishStatus(DictationState.Error, "No audio was captured.", false);
                 _notificationService.ShowNotification("Recording failed", "No audio was captured.", true);
                 return true;
@@ -206,6 +231,12 @@ public sealed class DictationController : IDictationController
                     await streamingSession.DisposeAsync();
                 }
 
+                var currentSettings = _settingsStore.CurrentSettings;
+                if (currentSettings.RestoreClipboard)
+                {
+                    await _clipboardPasteService.RestoreClipboardAsync();
+                }
+
                 PublishStatus(DictationState.Idle, string.Empty, false);
                 return true;
             }
@@ -218,6 +249,11 @@ public sealed class DictationController : IDictationController
                     await streamingSession.DisposeAsync();
                 }
 
+                if (settings.RestoreClipboard)
+                {
+                    await _clipboardPasteService.RestoreClipboardAsync();
+                }
+
                 PublishStatus(DictationState.Error, GetMissingApiKeyMessage(settings.Provider), false);
                 _notificationService.ShowNotification("API key missing", GetMissingApiKeyMessage(settings.Provider), true);
                 return true;
@@ -228,6 +264,11 @@ public sealed class DictationController : IDictationController
                 if (streamingSession is not null)
                 {
                     await streamingSession.DisposeAsync();
+                }
+
+                if (settings.RestoreClipboard)
+                {
+                    await _clipboardPasteService.RestoreClipboardAsync();
                 }
 
                 var providerName = GetProviderDisplayName(settings.Provider);
@@ -254,11 +295,21 @@ public sealed class DictationController : IDictationController
             }
             catch (OperationCanceledException)
             {
+                if (settings.RestoreClipboard)
+                {
+                    await _clipboardPasteService.RestoreClipboardAsync();
+                }
+
                 PublishStatus(DictationState.Idle, "Transcription cancelled.", false);
                 return true;
             }
             catch (Exception exception)
             {
+                if (settings.RestoreClipboard)
+                {
+                    await _clipboardPasteService.RestoreClipboardAsync();
+                }
+
                 PublishStatus(DictationState.Error, exception.Message, false);
                 _notificationService.ShowNotification("Transcription failed", exception.Message, true);
                 return true;
@@ -286,16 +337,33 @@ public sealed class DictationController : IDictationController
 
             if (streamingSession is null || !UsesLiveChunkPasting(settings))
             {
+                if (settings.RestoreClipboard)
+                {
+                    await _clipboardPasteService.BackupClipboardAsync();
+                }
+
                 try
                 {
                     await _clipboardPasteService.PasteTextAsync(transcription);
                 }
                 catch (Exception exception)
                 {
+                    if (settings.RestoreClipboard)
+                    {
+                        await _clipboardPasteService.RestoreClipboardAsync();
+                    }
+
                     PublishStatus(DictationState.Error, exception.Message, false);
                     _notificationService.ShowNotification("Paste failed", exception.Message, true);
                     return true;
                 }
+            }
+
+            if (settings.RestoreClipboard)
+            {
+                // Wait briefly to ensure the final paste sequence has been processed by the target application
+                await Task.Delay(250);
+                await _clipboardPasteService.RestoreClipboardAsync();
             }
 
             PublishStatus(DictationState.Idle, "Transcript pasted successfully.", false);
@@ -374,7 +442,31 @@ public sealed class DictationController : IDictationController
 
         try
         {
-            await _clipboardPasteService.PasteTextAsync(lastTranscript, triggeringHotkey);
+            var settings = _settingsStore.CurrentSettings;
+            if (settings.RestoreClipboard)
+            {
+                await _clipboardPasteService.BackupClipboardAsync();
+            }
+
+            try
+            {
+                await _clipboardPasteService.PasteTextAsync(lastTranscript, triggeringHotkey);
+            }
+            catch
+            {
+                if (settings.RestoreClipboard)
+                {
+                    await _clipboardPasteService.RestoreClipboardAsync();
+                }
+                throw;
+            }
+
+            if (settings.RestoreClipboard)
+            {
+                await Task.Delay(250);
+                await _clipboardPasteService.RestoreClipboardAsync();
+            }
+
             PublishStatus(DictationState.Idle, "Latest transcript pasted.", false);
             return true;
         }
@@ -609,6 +701,7 @@ public sealed class DictationController : IDictationController
             TranscriptionProvider.Fireworks => settings.FireworksApiKey ?? string.Empty,
             TranscriptionProvider.Deepgram => settings.DeepgramApiKey ?? string.Empty,
             TranscriptionProvider.Mistral => settings.MistralApiKey ?? string.Empty,
+            TranscriptionProvider.Cohere => settings.CohereApiKey ?? string.Empty,
             _ => settings.GroqApiKey ?? string.Empty,
         };
     }
@@ -620,6 +713,7 @@ public sealed class DictationController : IDictationController
             TranscriptionProvider.Fireworks => settings.FireworksModel,
             TranscriptionProvider.Deepgram => settings.DeepgramModel,
             TranscriptionProvider.Mistral => settings.MistralRealtimeEnabled ? MistralRealtimeModel : MistralOfflineModel,
+            TranscriptionProvider.Cohere => settings.CohereModel,
             _ => settings.GroqModel,
         };
     }
@@ -631,6 +725,7 @@ public sealed class DictationController : IDictationController
             TranscriptionProvider.Fireworks => settings.FireworksLanguage,
             TranscriptionProvider.Deepgram => settings.DeepgramLanguage,
             TranscriptionProvider.Mistral => "en",
+            TranscriptionProvider.Cohere => settings.CohereLanguage,
             _ => settings.GroqLanguage,
         };
     }
@@ -649,6 +744,7 @@ public sealed class DictationController : IDictationController
             TranscriptionProvider.Fireworks => "Open Settings and save a Fireworks API key before dictating.",
             TranscriptionProvider.Deepgram => "Open Settings and save a Deepgram API key before dictating.",
             TranscriptionProvider.Mistral => "Open Settings and save a Mistral API key before dictating.",
+            TranscriptionProvider.Cohere => "Open Settings and save a Cohere API key before dictating.",
             _ => "Open Settings and save a Groq API key before dictating.",
         };
     }
@@ -679,6 +775,7 @@ public sealed class DictationController : IDictationController
             TranscriptionProvider.Fireworks => "Fireworks",
             TranscriptionProvider.Deepgram => "Deepgram",
             TranscriptionProvider.Mistral => "Mistral",
+            TranscriptionProvider.Cohere => "Cohere",
             _ => "Groq",
         };
     }

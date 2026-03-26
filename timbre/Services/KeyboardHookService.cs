@@ -1,4 +1,4 @@
-﻿using System.ComponentModel;
+using System.ComponentModel;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 using Microsoft.UI.Dispatching;
@@ -136,7 +136,6 @@ public sealed class KeyboardHookService : IDisposable
             return HandleHotkeyCaptureKeyDown(virtualKeyCode);
         }
 
-        var isModifierKey = IsModifierKey(virtualKeyCode);
         var matchesRecordingMainKey = virtualKeyCode == _recordingHotkey.KeyCode;
         var matchesPasteLastTranscriptMainKey = virtualKeyCode == _pasteLastTranscriptHotkey.KeyCode;
         var matchesOpenHistoryMainKey = virtualKeyCode == _openHistoryHotkey.KeyCode;
@@ -144,25 +143,30 @@ public sealed class KeyboardHookService : IDisposable
         if (IsHotkeyPressed(_recordingHotkey) && !_recordingComboActive)
         {
             _recordingComboActive = true;
+            DiagnosticsLogger.Info($"Recording hotkey pressed. Hotkey='{_recordingHotkey.ToDisplayString()}'.");
             _dispatcherQueue.TryEnqueue(() => RecordingHotkeyStarted?.Invoke(this, EventArgs.Empty));
         }
 
         if (IsHotkeyPressed(_pasteLastTranscriptHotkey) && !_pasteLastTranscriptComboActive)
         {
             _pasteLastTranscriptComboActive = true;
+            DiagnosticsLogger.Info($"Paste last transcript hotkey pressed. Hotkey='{_pasteLastTranscriptHotkey.ToDisplayString()}'.");
             _dispatcherQueue.TryEnqueue(() => PasteLastTranscriptHotkeyPressed?.Invoke(this, EventArgs.Empty));
         }
 
         if (IsHotkeyPressed(_openHistoryHotkey) && !_openHistoryComboActive)
         {
             _openHistoryComboActive = true;
+            DiagnosticsLogger.Info($"Open history hotkey pressed. Hotkey='{_openHistoryHotkey.ToDisplayString()}'.");
             _dispatcherQueue.TryEnqueue(() => OpenHistoryHotkeyPressed?.Invoke(this, EventArgs.Empty));
         }
 
+        // Never swallow modifier key events in normal operation. If Ctrl/Shift/Alt/Win key down is allowed
+        // through to Windows, the corresponding key up must also be allowed through or the OS can think the
+        // modifier is still held after dictation stops.
         return (matchesRecordingMainKey && ModifiersExactlyMatch(_recordingHotkey)) ||
                (matchesPasteLastTranscriptMainKey && ModifiersExactlyMatch(_pasteLastTranscriptHotkey)) ||
-               (matchesOpenHistoryMainKey && ModifiersExactlyMatch(_openHistoryHotkey)) ||
-               ((_recordingComboActive || _pasteLastTranscriptComboActive || _openHistoryComboActive) && isModifierKey);
+               (matchesOpenHistoryMainKey && ModifiersExactlyMatch(_openHistoryHotkey));
     }
 
     private bool HandleKeyUp(uint virtualKeyCode)
@@ -181,17 +185,20 @@ public sealed class KeyboardHookService : IDisposable
         if (recordingComboWasActive && !IsHotkeyPressed(_recordingHotkey))
         {
             _recordingComboActive = false;
+            DiagnosticsLogger.Info($"Recording hotkey released. Hotkey='{_recordingHotkey.ToDisplayString()}'.");
             _dispatcherQueue.TryEnqueue(() => RecordingHotkeyEnded?.Invoke(this, EventArgs.Empty));
         }
 
         if (pasteLastTranscriptComboWasActive && virtualKeyCode == _pasteLastTranscriptHotkey.KeyCode)
         {
             _pasteLastTranscriptComboActive = false;
+            DiagnosticsLogger.Info($"Paste last transcript hotkey released. Hotkey='{_pasteLastTranscriptHotkey.ToDisplayString()}'.");
         }
 
         if (openHistoryComboWasActive && virtualKeyCode == _openHistoryHotkey.KeyCode)
         {
             _openHistoryComboActive = false;
+            DiagnosticsLogger.Info($"Open history hotkey released. Hotkey='{_openHistoryHotkey.ToDisplayString()}'.");
         }
 
         if (_isCapturingHotkey)
@@ -201,8 +208,7 @@ public sealed class KeyboardHookService : IDisposable
 
         return matchesRecordingMainKey ||
                matchesPasteLastTranscriptMainKey ||
-               matchesOpenHistoryMainKey ||
-               ((recordingComboWasActive || pasteLastTranscriptComboWasActive || openHistoryComboWasActive) && isModifierKey);
+               matchesOpenHistoryMainKey;
     }
 
     private bool HandleHotkeyCaptureKeyDown(uint virtualKeyCode)

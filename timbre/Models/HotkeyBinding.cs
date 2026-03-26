@@ -1,4 +1,4 @@
-﻿namespace timbre.Models;
+namespace timbre.Models;
 
 public sealed class HotkeyBinding : IEquatable<HotkeyBinding>
 {
@@ -10,7 +10,7 @@ public sealed class HotkeyBinding : IEquatable<HotkeyBinding>
 
     public bool Windows { get; init; }
 
-    public uint KeyCode { get; init; } = 0x20;
+    public uint KeyCode { get; init; } = 0xDD;
 
     public string ToDisplayString()
     {
@@ -44,14 +44,12 @@ public sealed class HotkeyBinding : IEquatable<HotkeyBinding>
 
     public static HotkeyBinding PasteLastTranscriptDefault => new()
     {
-        Shift = true,
-        KeyCode = 0x50,
+        KeyCode = 0xDB,
     };
 
     public static HotkeyBinding OpenHistoryDefault => new()
     {
-        Shift = true,
-        KeyCode = 0x49,
+        KeyCode = 0xDE,
     };
 
     public bool Equals(HotkeyBinding? other)
@@ -97,6 +95,9 @@ public sealed class HotkeyBinding : IEquatable<HotkeyBinding>
 
         return keyCode switch
         {
+            0xDB => "[",
+            0xDD => "]",
+            0xDE => "'",
             0x20 => "Space",
             0x08 => "Backspace",
             0x09 => "Tab",

@@ -26,6 +26,13 @@ If `dotnet` is on PATH in the user's shell, this is equivalent:
 dotnet build .\timbre\timbre.csproj -c Release -p:Platform=x64
 ```
 
+### Run tests
+Use this from the repo root to run the test suite:
+
+```powershell
+& "C:\Program Files\dotnet\dotnet.exe" test .\timbre.tests\timbre.tests.csproj -p:Platform=x64
+```
+
 ### Build the installer
 From the repo root:
 
@@ -80,6 +87,8 @@ installer\bin\Release\timbre.installer.msi
 ```
 
 ## Notes For Agents
+- **ALWAYS build and run tests after modifying code.** Do not assume your changes work without verifying they compile and pass existing tests.
+- **Add tests for new features:** If you are implementing new logic, adding new models, or fixing complex bugs, always consider writing or updating tests in the `timbre.tests` project (using xUnit, Moq, and FluentAssertions).
 - Prefer using the full `dotnet` path if command execution says `dotnet` is not recognized.
 - When changing WinUI input/focus behavior, build after edits because some issues only show up at compile/runtime.
 - If asked to diagnose crashes around settings input, check the latest log in `%LOCALAPPDATA%\Timbre\logs\` before guessing.

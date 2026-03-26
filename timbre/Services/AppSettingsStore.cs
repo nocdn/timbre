@@ -1,4 +1,4 @@
-﻿using System.Security.Cryptography;
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using timbre.Interfaces;
@@ -66,6 +66,7 @@ public sealed class AppSettingsStore : IAppSettingsStore
                 FireworksApiKey = Decrypt(storedSettings.EncryptedFireworksApiKey),
                 DeepgramApiKey = Decrypt(storedSettings.EncryptedDeepgramApiKey),
                 MistralApiKey = Decrypt(storedSettings.EncryptedMistralApiKey),
+                CohereApiKey = Decrypt(storedSettings.EncryptedCohereApiKey),
                 Hotkey = storedSettings.Hotkey ?? HotkeyBinding.Default,
                 PasteLastTranscriptHotkey = storedSettings.PasteLastTranscriptHotkey ?? HotkeyBinding.PasteLastTranscriptDefault,
                 OpenHistoryHotkey = storedSettings.OpenHistoryHotkey ?? HotkeyBinding.OpenHistoryDefault,
@@ -86,11 +87,16 @@ public sealed class AppSettingsStore : IAppSettingsStore
                 DeepgramStreamingEnabled = deepgramStreamingEnabled,
                 MistralRealtimeEnabled = storedSettings.MistralRealtimeEnabled ?? false,
                 MistralRealtimeMode = NormalizeMistralRealtimeMode(storedSettings.MistralRealtimeMode),
+                CohereModel = string.IsNullOrWhiteSpace(storedSettings.CohereModel)
+                    ? "cohere-transcribe-03-2026"
+                    : storedSettings.CohereModel,
+                CohereLanguage = NormalizeLanguage(storedSettings.CohereLanguage),
+                RestoreClipboard = storedSettings.RestoreClipboard ?? true,
                 HasCompletedInitialSetup = storedSettings.HasCompletedInitialSetup ?? false,
             };
 
             DiagnosticsLogger.Info(
-                $"Settings loaded. SelectedInputDeviceId='{_currentSettings.SelectedInputDeviceId}', Provider='{_currentSettings.Provider}', HasGroqApiKey={!string.IsNullOrWhiteSpace(_currentSettings.GroqApiKey)}, HasFireworksApiKey={!string.IsNullOrWhiteSpace(_currentSettings.FireworksApiKey)}, HasDeepgramApiKey={!string.IsNullOrWhiteSpace(_currentSettings.DeepgramApiKey)}, HasMistralApiKey={!string.IsNullOrWhiteSpace(_currentSettings.MistralApiKey)}, Hotkey='{_currentSettings.Hotkey.ToDisplayString()}', PasteLastTranscriptHotkey='{_currentSettings.PasteLastTranscriptHotkey.ToDisplayString()}', OpenHistoryHotkey='{_currentSettings.OpenHistoryHotkey.ToDisplayString()}', TranscriptHistoryLimit={_currentSettings.TranscriptHistoryLimit}, PushToTalk={_currentSettings.PushToTalk}, LaunchAtStartup={_currentSettings.LaunchAtStartup}, SoundFeedbackEnabled={_currentSettings.SoundFeedbackEnabled}, GroqModel='{_currentSettings.GroqModel}', GroqLanguage='{_currentSettings.GroqLanguage}', FireworksModel='{_currentSettings.FireworksModel}', FireworksLanguage='{_currentSettings.FireworksLanguage}', DeepgramModel='{_currentSettings.DeepgramModel}', DeepgramLanguage='{_currentSettings.DeepgramLanguage}', DeepgramStreamingEnabled={_currentSettings.DeepgramStreamingEnabled}, MistralRealtimeEnabled={_currentSettings.MistralRealtimeEnabled}, MistralRealtimeMode={_currentSettings.MistralRealtimeMode}, HasCompletedInitialSetup={_currentSettings.HasCompletedInitialSetup}.");
+                $"Settings loaded. SelectedInputDeviceId='{_currentSettings.SelectedInputDeviceId}', Provider='{_currentSettings.Provider}', HasGroqApiKey={!string.IsNullOrWhiteSpace(_currentSettings.GroqApiKey)}, HasFireworksApiKey={!string.IsNullOrWhiteSpace(_currentSettings.FireworksApiKey)}, HasDeepgramApiKey={!string.IsNullOrWhiteSpace(_currentSettings.DeepgramApiKey)}, HasMistralApiKey={!string.IsNullOrWhiteSpace(_currentSettings.MistralApiKey)}, HasCohereApiKey={!string.IsNullOrWhiteSpace(_currentSettings.CohereApiKey)}, Hotkey='{_currentSettings.Hotkey.ToDisplayString()}', PasteLastTranscriptHotkey='{_currentSettings.PasteLastTranscriptHotkey.ToDisplayString()}', OpenHistoryHotkey='{_currentSettings.OpenHistoryHotkey.ToDisplayString()}', TranscriptHistoryLimit={_currentSettings.TranscriptHistoryLimit}, PushToTalk={_currentSettings.PushToTalk}, LaunchAtStartup={_currentSettings.LaunchAtStartup}, SoundFeedbackEnabled={_currentSettings.SoundFeedbackEnabled}, GroqModel='{_currentSettings.GroqModel}', GroqLanguage='{_currentSettings.GroqLanguage}', FireworksModel='{_currentSettings.FireworksModel}', FireworksLanguage='{_currentSettings.FireworksLanguage}', DeepgramModel='{_currentSettings.DeepgramModel}', DeepgramLanguage='{_currentSettings.DeepgramLanguage}', DeepgramStreamingEnabled={_currentSettings.DeepgramStreamingEnabled}, MistralRealtimeEnabled={_currentSettings.MistralRealtimeEnabled}, MistralRealtimeMode={_currentSettings.MistralRealtimeMode}, CohereModel='{_currentSettings.CohereModel}', CohereLanguage='{_currentSettings.CohereLanguage}', HasCompletedInitialSetup={_currentSettings.HasCompletedInitialSetup}.");
 
             _hasLoadedSettings = true;
             return _currentSettings;
@@ -116,7 +122,7 @@ public sealed class AppSettingsStore : IAppSettingsStore
         try
         {
             DiagnosticsLogger.Info(
-                $"Saving settings. SelectedInputDeviceId='{settings.SelectedInputDeviceId}', Provider='{settings.Provider}', HasGroqApiKey={!string.IsNullOrWhiteSpace(settings.GroqApiKey)}, HasFireworksApiKey={!string.IsNullOrWhiteSpace(settings.FireworksApiKey)}, HasDeepgramApiKey={!string.IsNullOrWhiteSpace(settings.DeepgramApiKey)}, HasMistralApiKey={!string.IsNullOrWhiteSpace(settings.MistralApiKey)}, Hotkey='{settings.Hotkey.ToDisplayString()}', PasteLastTranscriptHotkey='{settings.PasteLastTranscriptHotkey.ToDisplayString()}', OpenHistoryHotkey='{settings.OpenHistoryHotkey.ToDisplayString()}', TranscriptHistoryLimit={settings.TranscriptHistoryLimit}, PushToTalk={settings.PushToTalk}, LaunchAtStartup={settings.LaunchAtStartup}, SoundFeedbackEnabled={settings.SoundFeedbackEnabled}, GroqModel='{settings.GroqModel}', GroqLanguage='{settings.GroqLanguage}', FireworksModel='{settings.FireworksModel}', FireworksLanguage='{settings.FireworksLanguage}', DeepgramModel='{settings.DeepgramModel}', DeepgramLanguage='{settings.DeepgramLanguage}', DeepgramStreamingEnabled={settings.DeepgramStreamingEnabled}, MistralRealtimeEnabled={settings.MistralRealtimeEnabled}, MistralRealtimeMode={settings.MistralRealtimeMode}.");
+                $"Saving settings. SelectedInputDeviceId='{settings.SelectedInputDeviceId}', Provider='{settings.Provider}', HasGroqApiKey={!string.IsNullOrWhiteSpace(settings.GroqApiKey)}, HasFireworksApiKey={!string.IsNullOrWhiteSpace(settings.FireworksApiKey)}, HasDeepgramApiKey={!string.IsNullOrWhiteSpace(settings.DeepgramApiKey)}, HasMistralApiKey={!string.IsNullOrWhiteSpace(settings.MistralApiKey)}, HasCohereApiKey={!string.IsNullOrWhiteSpace(settings.CohereApiKey)}, Hotkey='{settings.Hotkey.ToDisplayString()}', PasteLastTranscriptHotkey='{settings.PasteLastTranscriptHotkey.ToDisplayString()}', OpenHistoryHotkey='{settings.OpenHistoryHotkey.ToDisplayString()}', TranscriptHistoryLimit={settings.TranscriptHistoryLimit}, PushToTalk={settings.PushToTalk}, LaunchAtStartup={settings.LaunchAtStartup}, SoundFeedbackEnabled={settings.SoundFeedbackEnabled}, GroqModel='{settings.GroqModel}', GroqLanguage='{settings.GroqLanguage}', FireworksModel='{settings.FireworksModel}', FireworksLanguage='{settings.FireworksLanguage}', DeepgramModel='{settings.DeepgramModel}', DeepgramLanguage='{settings.DeepgramLanguage}', DeepgramStreamingEnabled={settings.DeepgramStreamingEnabled}, MistralRealtimeEnabled={settings.MistralRealtimeEnabled}, MistralRealtimeMode={settings.MistralRealtimeMode}, CohereModel='{settings.CohereModel}', CohereLanguage='{settings.CohereLanguage}'.");
             var storedSettings = new StoredSettings
             {
                 SelectedInputDeviceId = settings.SelectedInputDeviceId,
@@ -125,6 +131,7 @@ public sealed class AppSettingsStore : IAppSettingsStore
                 EncryptedFireworksApiKey = Encrypt(settings.FireworksApiKey),
                 EncryptedDeepgramApiKey = Encrypt(settings.DeepgramApiKey),
                 EncryptedMistralApiKey = Encrypt(settings.MistralApiKey),
+                EncryptedCohereApiKey = Encrypt(settings.CohereApiKey),
                 Hotkey = settings.Hotkey,
                 PasteLastTranscriptHotkey = settings.PasteLastTranscriptHotkey,
                 OpenHistoryHotkey = settings.OpenHistoryHotkey,
@@ -141,6 +148,9 @@ public sealed class AppSettingsStore : IAppSettingsStore
                 DeepgramStreamingEnabled = settings.DeepgramStreamingEnabled,
                 MistralRealtimeEnabled = settings.MistralRealtimeEnabled,
                 MistralRealtimeMode = NormalizeMistralRealtimeMode(settings.MistralRealtimeMode),
+                CohereModel = string.IsNullOrWhiteSpace(settings.CohereModel) ? "cohere-transcribe-03-2026" : settings.CohereModel,
+                CohereLanguage = NormalizeLanguage(settings.CohereLanguage),
+                RestoreClipboard = settings.RestoreClipboard,
                 HasCompletedInitialSetup = settings.HasCompletedInitialSetup,
             };
 
@@ -154,6 +164,7 @@ public sealed class AppSettingsStore : IAppSettingsStore
                 FireworksApiKey = settings.FireworksApiKey,
                 DeepgramApiKey = settings.DeepgramApiKey,
                 MistralApiKey = settings.MistralApiKey,
+                CohereApiKey = settings.CohereApiKey,
                 Hotkey = settings.Hotkey,
                 PasteLastTranscriptHotkey = settings.PasteLastTranscriptHotkey,
                 OpenHistoryHotkey = settings.OpenHistoryHotkey,
@@ -170,6 +181,9 @@ public sealed class AppSettingsStore : IAppSettingsStore
                 DeepgramStreamingEnabled = settings.DeepgramStreamingEnabled,
                 MistralRealtimeEnabled = settings.MistralRealtimeEnabled,
                 MistralRealtimeMode = NormalizeMistralRealtimeMode(settings.MistralRealtimeMode),
+                CohereModel = string.IsNullOrWhiteSpace(settings.CohereModel) ? "cohere-transcribe-03-2026" : settings.CohereModel,
+                CohereLanguage = NormalizeLanguage(settings.CohereLanguage),
+                RestoreClipboard = settings.RestoreClipboard,
                 HasCompletedInitialSetup = settings.HasCompletedInitialSetup,
             };
             _hasLoadedSettings = true;
@@ -271,6 +285,8 @@ public sealed class AppSettingsStore : IAppSettingsStore
 
         public string? EncryptedMistralApiKey { get; set; }
 
+        public string? EncryptedCohereApiKey { get; set; }
+
         public TranscriptionProvider? Provider { get; set; }
 
         public HotkeyBinding? Hotkey { get; set; }
@@ -304,6 +320,12 @@ public sealed class AppSettingsStore : IAppSettingsStore
         public bool? MistralRealtimeEnabled { get; set; }
 
         public MistralRealtimeMode? MistralRealtimeMode { get; set; }
+
+        public string? CohereModel { get; set; }
+
+        public string? CohereLanguage { get; set; }
+
+        public bool? RestoreClipboard { get; set; }
 
         public bool? HasCompletedInitialSetup { get; set; }
     }
