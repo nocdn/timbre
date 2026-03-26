@@ -164,12 +164,12 @@ public sealed partial class MainWindow : Window
 
     private void HotkeyCaptureButton_Click(object sender, RoutedEventArgs e)
     {
-        StartHotkeyCapture(HotkeyCaptureButton, _viewModel.ApplyRecordingHotkey, IsRecordingHotkeyAllowed);
+        StartHotkeyCapture(HotkeyCaptureButton, _viewModel.ApplyRecordingHotkey, IsHotkeyAllowedForCapture);
     }
 
     private void PasteLastTranscriptHotkeyCaptureButton_Click(object sender, RoutedEventArgs e)
     {
-        StartHotkeyCapture(PasteLastTranscriptHotkeyCaptureButton, _viewModel.ApplyPasteLastTranscriptHotkey);
+        StartHotkeyCapture(PasteLastTranscriptHotkeyCaptureButton, _viewModel.ApplyPasteLastTranscriptHotkey, IsHotkeyAllowedForCapture);
     }
 
     private async void ResetHotkeyButton_Click(object sender, RoutedEventArgs e)
@@ -188,7 +188,7 @@ public sealed partial class MainWindow : Window
 
     private void OpenHistoryHotkeyCaptureButton_Click(object sender, RoutedEventArgs e)
     {
-        StartHotkeyCapture(OpenHistoryHotkeyCaptureButton, _viewModel.ApplyOpenHistoryHotkey);
+        StartHotkeyCapture(OpenHistoryHotkeyCaptureButton, _viewModel.ApplyOpenHistoryHotkey, IsHotkeyAllowedForCapture);
     }
 
     private async void ResetOpenHistoryHotkeyButton_Click(object sender, RoutedEventArgs e)
@@ -379,9 +379,9 @@ public sealed partial class MainWindow : Window
         TranscriptHistoryLimitSavedTextBlock.Visibility = Visibility.Collapsed;
     }
 
-    private static bool IsRecordingHotkeyAllowed(HotkeyBinding hotkey)
+    private static bool IsHotkeyAllowedForCapture(HotkeyBinding hotkey)
     {
-        return hotkey.KeyCode is not 0x0D and not 0x1B;
+        return HotkeyValidationService.IsAllowedForCapture(hotkey);
     }
 
     private void StartHotkeyCapture(Button button, Action<HotkeyBinding> onHotkeyCaptured, Func<HotkeyBinding, bool>? hotkeyCaptureValidator = null)

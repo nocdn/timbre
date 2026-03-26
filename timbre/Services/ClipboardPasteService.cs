@@ -1,4 +1,5 @@
-﻿using System.ComponentModel;
+using System.ComponentModel;
+using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Runtime.InteropServices.ComTypes;
 using System.Text;
@@ -10,8 +11,16 @@ namespace timbre.Services;
 
 public sealed class ClipboardPasteService : IClipboardPasteService
 {
+    private const int HotkeyReleaseDelayMilliseconds = 30;
+    private const int PasteDispatchDelayMilliseconds = 75;
+    private const int PasteObservationPollMilliseconds = 10;
+    private const int PasteObservationTimeoutMilliseconds = 600;
+
     private readonly IUiDispatcherQueueAccessor _dispatcherQueueAccessor;
-    private IDataObject? _clipboardBackup;
+    private readonly SemaphoreSlim _clipboardOperationLock = new(1, 1);
+    private readonly Stack<IDataObject?> _clipboardBackups = [];
+
+    private readonly record struct PasteCompletionObservation(bool Observed, uint ClipboardOwnerProcessId, long ElapsedMilliseconds);
 
     public ClipboardPasteService(IUiDispatcherQueueAccessor dispatcherQueueAccessor)
     {
@@ -25,33 +34,37 @@ public sealed class ClipboardPasteService : IClipboardPasteService
             throw new InvalidOperationException("The transcription was empty.");
         }
 
-        return RunOnUiThreadAsync(() =>
+        return ExecuteClipboardOperationAsync(() =>
         {
             return CopyTextOnUiThreadAsync(text, cancellationToken);
-        });
+        }, cancellationToken);
     }
 
-    public Task PasteTextAsync(string text, HotkeyBinding? triggeringHotkey = null, CancellationToken cancellationToken = default)
+    public Task PasteTextAsync(string text, HotkeyBinding? triggeringHotkey = null, bool waitForPasteCompletion = false, CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(text))
         {
             throw new InvalidOperationException("The transcription was empty.");
         }
 
-        return RunOnUiThreadAsync(async () =>
+        return ExecuteClipboardOperationAsync(async () =>
         {
+            var stopwatch = Stopwatch.StartNew();
             cancellationToken.ThrowIfCancellationRequested();
-            DiagnosticsLogger.Info($"PasteTextAsync entered. TextLength={text.Length}.");
+            DiagnosticsLogger.Info($"PasteTextAsync entered. TextLength={text.Length}, WaitForPasteCompletion={waitForPasteCompletion}, HasTriggeringHotkey={triggeringHotkey is not null}.");
             await SetClipboardTextAsync(text, cancellationToken);
-            DiagnosticsLogger.Info("Clipboard text set successfully.");
+            DiagnosticsLogger.Info($"Clipboard text set successfully. ElapsedMs={stopwatch.ElapsedMilliseconds}.");
 
             if (triggeringHotkey is not null)
             {
                 SendInputEvents(CreateReleaseHotkeyInputs(triggeringHotkey));
-                await Task.Delay(30, cancellationToken);
+                await Task.Delay(HotkeyReleaseDelayMilliseconds, cancellationToken);
             }
 
-            await Task.Delay(75, cancellationToken);
+            await Task.Delay(PasteDispatchDelayMilliseconds, cancellationToken);
+            var pasteTargetProcessId = GetForegroundProcessId();
+            var pasteDispatchMethod = "SendInput";
+
             try
             {
                 SendInputEvents(CreatePasteShortcutInputs());
@@ -59,17 +72,28 @@ public sealed class ClipboardPasteService : IClipboardPasteService
             }
             catch (Win32Exception exception) when (exception.NativeErrorCode == 87)
             {
+                pasteDispatchMethod = "WM_PASTE";
                 DiagnosticsLogger.Info("SendInput returned Win32 error 87. Falling back to WM_PASTE.");
                 SendPasteMessage();
             }
-        });
+
+            var pasteObservation = new PasteCompletionObservation(false, 0, 0);
+            if (waitForPasteCompletion)
+            {
+                pasteObservation = await WaitForPasteCompletionAsync(pasteTargetProcessId, cancellationToken);
+            }
+
+            DiagnosticsLogger.Info(
+                $"PasteTextAsync completed. TotalElapsedMs={stopwatch.ElapsedMilliseconds}, PasteDispatchMethod='{pasteDispatchMethod}', TargetProcessId={pasteTargetProcessId}, WaitedForPasteCompletion={waitForPasteCompletion}, PasteCompletionObserved={pasteObservation.Observed}, ClipboardOwnerProcessId={pasteObservation.ClipboardOwnerProcessId}, PasteObservationElapsedMs={pasteObservation.ElapsedMilliseconds}.");
+        }, cancellationToken);
     }
 
     public Task BackupClipboardAsync(CancellationToken cancellationToken = default)
     {
-        return RunOnUiThreadAsync(async () =>
+        return ExecuteClipboardOperationAsync(async () =>
         {
-            DiagnosticsLogger.Info("BackupClipboardAsync: Attempting to backup clipboard.");
+            var stopwatch = Stopwatch.StartNew();
+            DiagnosticsLogger.Info($"BackupClipboardAsync: Attempting to backup clipboard. ExistingBackupCount={_clipboardBackups.Count}.");
             for (var attempt = 1; attempt <= 10; attempt++)
             {
                 try
@@ -77,8 +101,8 @@ public sealed class ClipboardPasteService : IClipboardPasteService
                     NativeMethods.OleGetClipboard(out var backup);
                     if (backup != null)
                     {
-                        _clipboardBackup = backup;
-                        DiagnosticsLogger.Info("BackupClipboardAsync: Clipboard successfully backed up.");
+                        _clipboardBackups.Push(backup);
+                        DiagnosticsLogger.Info($"BackupClipboardAsync: Clipboard successfully backed up. Attempt={attempt}, BackupCount={_clipboardBackups.Count}, ElapsedMs={stopwatch.ElapsedMilliseconds}.");
                         return;
                     }
                     else
@@ -103,59 +127,75 @@ public sealed class ClipboardPasteService : IClipboardPasteService
             }
 
             DiagnosticsLogger.Error("BackupClipboardAsync: Failed to backup clipboard after 10 attempts.", new InvalidOperationException("Clipboard backup failed."));
-            _clipboardBackup = null;
-        });
+            _clipboardBackups.Push(null);
+            DiagnosticsLogger.Info($"BackupClipboardAsync: Stored null backup sentinel. BackupCount={_clipboardBackups.Count}, ElapsedMs={stopwatch.ElapsedMilliseconds}.");
+        }, cancellationToken);
     }
 
     public Task RestoreClipboardAsync(CancellationToken cancellationToken = default)
     {
-        return RunOnUiThreadAsync(async () =>
+        return ExecuteClipboardOperationAsync(async () =>
         {
-            DiagnosticsLogger.Info("RestoreClipboardAsync: Attempting to restore clipboard.");
-            if (_clipboardBackup is null)
+            var stopwatch = Stopwatch.StartNew();
+            DiagnosticsLogger.Info($"RestoreClipboardAsync: Attempting to restore clipboard. AvailableBackupCount={_clipboardBackups.Count}.");
+            if (_clipboardBackups.Count == 0)
             {
-                DiagnosticsLogger.Info("RestoreClipboardAsync: No clipboard backup exists. Skipping restore.");
+                DiagnosticsLogger.Info($"RestoreClipboardAsync: No clipboard backup exists. Skipping restore. ElapsedMs={stopwatch.ElapsedMilliseconds}.");
                 return;
             }
 
-            try
+            var clipboardBackup = _clipboardBackups.Pop();
+            if (clipboardBackup is null)
             {
-                for (var attempt = 1; attempt <= 10; attempt++)
-                {
-                    try
-                    {
-                        NativeMethods.OleSetClipboard(_clipboardBackup);
-                        // We purposely DO NOT call OleFlushClipboard here. 
-                        // Flushing forces the OS to render all formats to HGLOBALs, which then get destroyed 
-                        // during the next dictation's EmptyClipboard(), breaking subsequent backups.
-                        DiagnosticsLogger.Info($"RestoreClipboardAsync: Clipboard successfully restored from backup on attempt {attempt}.");
-                        return;
-                    }
-                    catch (COMException exception)
-                    {
-                        DiagnosticsLogger.Info($"RestoreClipboardAsync: Attempt {attempt} failed ({exception.Message}).");
-                        if (attempt == 10)
-                        {
-                            DiagnosticsLogger.Error("RestoreClipboardAsync: Failed to restore clipboard after 10 attempts.", exception);
-                        }
-                    }
-                    catch (Exception exception)
-                    {
-                        DiagnosticsLogger.Error("RestoreClipboardAsync: Unexpected exception occurred.", exception);
-                        break;
-                    }
+                DiagnosticsLogger.Info($"RestoreClipboardAsync: Latest clipboard backup was unavailable. Skipping restore. RemainingBackupCount={_clipboardBackups.Count}, ElapsedMs={stopwatch.ElapsedMilliseconds}.");
+                return;
+            }
 
-                    if (attempt < 10)
+            for (var attempt = 1; attempt <= 10; attempt++)
+            {
+                try
+                {
+                    NativeMethods.OleSetClipboard(clipboardBackup);
+                    // We purposely DO NOT call OleFlushClipboard here. 
+                    // Flushing forces the OS to render all formats to HGLOBALs, which then get destroyed 
+                    // during the next dictation's EmptyClipboard(), breaking subsequent backups.
+                    DiagnosticsLogger.Info($"RestoreClipboardAsync: Clipboard successfully restored from backup on attempt {attempt}. RemainingBackupCount={_clipboardBackups.Count}, ElapsedMs={stopwatch.ElapsedMilliseconds}.");
+                    return;
+                }
+                catch (COMException exception)
+                {
+                    DiagnosticsLogger.Info($"RestoreClipboardAsync: Attempt {attempt} failed ({exception.Message}).");
+                    if (attempt == 10)
                     {
-                        await Task.Delay(40, cancellationToken);
+                        DiagnosticsLogger.Error("RestoreClipboardAsync: Failed to restore clipboard after 10 attempts.", exception);
                     }
                 }
+                catch (Exception exception)
+                {
+                    DiagnosticsLogger.Error("RestoreClipboardAsync: Unexpected exception occurred.", exception);
+                    break;
+                }
+
+                if (attempt < 10)
+                {
+                    await Task.Delay(40, cancellationToken);
+                }
             }
-            finally
-            {
-                _clipboardBackup = null;
-            }
-        });
+        }, cancellationToken);
+    }
+
+    private async Task ExecuteClipboardOperationAsync(Func<Task> action, CancellationToken cancellationToken)
+    {
+        await _clipboardOperationLock.WaitAsync(cancellationToken);
+
+        try
+        {
+            await RunOnUiThreadAsync(action);
+        }
+        finally
+        {
+            _clipboardOperationLock.Release();
+        }
     }
 
     private Task RunOnUiThreadAsync(Func<Task> action)
@@ -185,6 +225,45 @@ public sealed class ClipboardPasteService : IClipboardPasteService
         }
 
         return completionSource.Task;
+    }
+
+    private static async Task<PasteCompletionObservation> WaitForPasteCompletionAsync(uint pasteTargetProcessId, CancellationToken cancellationToken)
+    {
+        var stopwatch = Stopwatch.StartNew();
+        var observedClipboardAccess = false;
+        uint clipboardOwnerProcessId = 0;
+        var attemptCount = PasteObservationTimeoutMilliseconds / PasteObservationPollMilliseconds;
+
+        for (var attempt = 0; attempt < attemptCount; attempt++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            var clipboardWindow = NativeMethods.GetOpenClipboardWindow();
+            if (clipboardWindow != IntPtr.Zero)
+            {
+                var clipboardWindowProcessId = GetProcessIdForWindow(clipboardWindow);
+                if (pasteTargetProcessId == 0 || clipboardWindowProcessId == pasteTargetProcessId)
+                {
+                    if (!observedClipboardAccess)
+                    {
+                        DiagnosticsLogger.Info($"Paste completion wait observed clipboard acquisition. TargetProcessId={pasteTargetProcessId}, ClipboardOwnerProcessId={clipboardWindowProcessId}, ElapsedMs={stopwatch.ElapsedMilliseconds}.");
+                    }
+
+                    observedClipboardAccess = true;
+                    clipboardOwnerProcessId = clipboardWindowProcessId;
+                }
+            }
+            else if (observedClipboardAccess)
+            {
+                DiagnosticsLogger.Info($"Paste completion observed. TargetProcessId={pasteTargetProcessId}, ClipboardOwnerProcessId={clipboardOwnerProcessId}, ElapsedMs={stopwatch.ElapsedMilliseconds}.");
+                return new PasteCompletionObservation(true, clipboardOwnerProcessId, stopwatch.ElapsedMilliseconds);
+            }
+
+            await Task.Delay(PasteObservationPollMilliseconds, cancellationToken);
+        }
+
+        DiagnosticsLogger.Info($"Paste completion was not observed before timeout. TargetProcessId={pasteTargetProcessId}, ClipboardOwnerProcessId={clipboardOwnerProcessId}, TimeoutMs={PasteObservationTimeoutMilliseconds}.");
+        return new PasteCompletionObservation(false, clipboardOwnerProcessId, stopwatch.ElapsedMilliseconds);
     }
 
     private static async Task CopyTextOnUiThreadAsync(string text, CancellationToken cancellationToken)
@@ -357,5 +436,22 @@ public sealed class ClipboardPasteService : IClipboardPasteService
         }
 
         DiagnosticsLogger.Info($"WM_PASTE posted to foreground window 0x{foregroundWindow.ToInt64():X}.");
+    }
+
+    private static uint GetForegroundProcessId()
+    {
+        var foregroundWindow = NativeMethods.GetForegroundWindow();
+        return GetProcessIdForWindow(foregroundWindow);
+    }
+
+    private static uint GetProcessIdForWindow(IntPtr windowHandle)
+    {
+        if (windowHandle == IntPtr.Zero)
+        {
+            return 0;
+        }
+
+        NativeMethods.GetWindowThreadProcessId(windowHandle, out var processId);
+        return processId;
     }
 }

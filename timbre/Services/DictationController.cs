@@ -98,11 +98,6 @@ public sealed class DictationController : IDictationController
                 if (UsesRealtimeStreaming(settings))
                 {
                     DiagnosticsLogger.Info($"Preparing {GetProviderDisplayName(settings.Provider)} live streaming session before microphone start.");
-                    if (settings.RestoreClipboard)
-                    {
-                        await _clipboardPasteService.BackupClipboardAsync();
-                    }
-
                     transcriptionCancellationTokenSource = new CancellationTokenSource();
                     ResetStreamingFailure();
                     streamingSession = await CreateRealtimeStreamingSessionAsync(settings, transcriptionCancellationTokenSource.Token);
@@ -344,7 +339,7 @@ public sealed class DictationController : IDictationController
 
                 try
                 {
-                    await _clipboardPasteService.PasteTextAsync(transcription);
+                    await _clipboardPasteService.PasteTextAsync(transcription, waitForPasteCompletion: settings.RestoreClipboard);
                 }
                 catch (Exception exception)
                 {
@@ -361,8 +356,6 @@ public sealed class DictationController : IDictationController
 
             if (settings.RestoreClipboard)
             {
-                // Wait briefly to ensure the final paste sequence has been processed by the target application
-                await Task.Delay(250);
                 await _clipboardPasteService.RestoreClipboardAsync();
             }
 
@@ -450,7 +443,7 @@ public sealed class DictationController : IDictationController
 
             try
             {
-                await _clipboardPasteService.PasteTextAsync(lastTranscript, triggeringHotkey);
+                await _clipboardPasteService.PasteTextAsync(lastTranscript, triggeringHotkey, waitForPasteCompletion: settings.RestoreClipboard);
             }
             catch
             {
@@ -463,7 +456,6 @@ public sealed class DictationController : IDictationController
 
             if (settings.RestoreClipboard)
             {
-                await Task.Delay(250);
                 await _clipboardPasteService.RestoreClipboardAsync();
             }
 

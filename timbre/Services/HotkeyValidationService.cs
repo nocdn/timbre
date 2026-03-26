@@ -1,9 +1,15 @@
-﻿using timbre.Models;
+using timbre.Interop;
+using timbre.Models;
 
 namespace timbre.Services;
 
 public static class HotkeyValidationService
 {
+    public static bool IsAllowedForCapture(HotkeyBinding hotkey)
+    {
+        return GetBlockingErrorMessage(hotkey) is null;
+    }
+
     public static HotkeyValidationResult Validate(
         HotkeyBinding recordingHotkey,
         HotkeyBinding pasteHotkey,
@@ -37,9 +43,10 @@ public static class HotkeyValidationService
 
     private static void ValidateSingle(string label, HotkeyBinding hotkey, HotkeyValidationResult result)
     {
-        if (hotkey.KeyCode == 0)
+        var blockingErrorMessage = GetBlockingErrorMessage(hotkey);
+        if (blockingErrorMessage is not null)
         {
-            result.Errors.Add($"{label} hotkey is missing a main key.");
+            result.Errors.Add($"{label} hotkey {blockingErrorMessage}");
             return;
         }
 
@@ -53,6 +60,16 @@ public static class HotkeyValidationService
             result.Warnings.Add($"{label} hotkey uses F12, which Windows reserves for debugging in some scenarios.");
         }
 
+        if (hotkey.KeyCode == 0x2C)
+        {
+            result.Warnings.Add($"{label} hotkey uses Print Screen, which can conflict with screen capture tools.");
+        }
+
+        if (IsMediaOrPowerKey(hotkey.KeyCode))
+        {
+            result.Warnings.Add($"{label} hotkey uses a media, volume, or power key, which can behave inconsistently across keyboards.");
+        }
+
         if (hotkey.Alt && hotkey.KeyCode == 0x09)
         {
             result.Warnings.Add($"{label} hotkey matches Alt+Tab, which is a common Windows shortcut.");
@@ -63,14 +80,57 @@ public static class HotkeyValidationService
             result.Warnings.Add($"{label} hotkey matches Alt+F4, which closes windows.");
         }
 
-        if (hotkey.Control && hotkey.KeyCode == 0x1B)
-        {
-            result.Warnings.Add($"{label} hotkey matches Ctrl+Esc, which opens the Start menu.");
-        }
-
         if (hotkey.Control && hotkey.Shift && hotkey.KeyCode == 0x1B)
         {
             result.Warnings.Add($"{label} hotkey matches Ctrl+Shift+Esc, which opens Task Manager.");
         }
+
+        if (hotkey.Control && hotkey.KeyCode == 0x1B)
+        {
+            result.Warnings.Add($"{label} hotkey matches Ctrl+Esc, which opens the Start menu.");
+        }
+    }
+
+    private static string? GetBlockingErrorMessage(HotkeyBinding hotkey)
+    {
+        if (hotkey.KeyCode == 0)
+        {
+            return "is missing a main key.";
+        }
+
+        if (IsModifierKey(hotkey.KeyCode))
+        {
+            return "cannot use a modifier key as the main key.";
+        }
+
+        if (hotkey.KeyCode == 0x09)
+        {
+            return "cannot use Tab as the main key.";
+        }
+
+        if (hotkey.KeyCode is 0x0D or 0x1B)
+        {
+            return "cannot use Enter or Esc as the main key.";
+        }
+
+        if (!hotkey.Control && !hotkey.Alt && !hotkey.Windows)
+        {
+            return "must include Ctrl, Alt, or Win to avoid conflicting with normal typing.";
+        }
+
+        return null;
+    }
+
+    private static bool IsModifierKey(uint keyCode)
+    {
+        return keyCode is NativeMethods.VK_CONTROL or NativeMethods.VK_LCONTROL or NativeMethods.VK_RCONTROL
+            or NativeMethods.VK_SHIFT or NativeMethods.VK_LSHIFT or NativeMethods.VK_RSHIFT
+            or NativeMethods.VK_MENU or NativeMethods.VK_LMENU or NativeMethods.VK_RMENU
+            or NativeMethods.VK_LWIN or NativeMethods.VK_RWIN;
+    }
+
+    private static bool IsMediaOrPowerKey(uint keyCode)
+    {
+        return keyCode is 0x5F or >= 0xAD and <= 0xB3;
     }
 }
