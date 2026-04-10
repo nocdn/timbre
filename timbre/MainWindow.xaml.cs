@@ -118,6 +118,7 @@ public sealed partial class MainWindow : Window
             DeepgramProviderRadioButton.IsChecked = _viewModel.IsDeepgramSelected;
             MistralProviderRadioButton.IsChecked = _viewModel.IsMistralSelected;
             CohereProviderRadioButton.IsChecked = _viewModel.IsCohereSelected;
+            AquaVoiceProviderRadioButton.IsChecked = _viewModel.IsAquaVoiceSelected;
             HotkeyCaptureButton.Content = _viewModel.RecordingHotkeyDisplay;
             PasteLastTranscriptHotkeyCaptureButton.Content = _viewModel.PasteLastTranscriptHotkeyDisplay;
             OpenHistoryHotkeyCaptureButton.Content = _viewModel.OpenHistoryHotkeyDisplay;
@@ -145,11 +146,16 @@ public sealed partial class MainWindow : Window
             CohereModelComboBox.ItemsSource = _viewModel.AvailableCohereModels;
             CohereModelComboBox.SelectedItem = _viewModel.SelectedCohereModel;
             CohereLanguageTextBox.Text = _viewModel.CohereLanguage;
+            AquaVoiceApiKeyBox.Password = _viewModel.AquaVoiceApiKey;
+            AquaVoiceModelComboBox.ItemsSource = _viewModel.AvailableAquaVoiceModels;
+            AquaVoiceModelComboBox.SelectedItem = _viewModel.SelectedAquaVoiceModel;
+            AquaVoiceLanguageTextBox.Text = _viewModel.AquaVoiceLanguage;
             GroqSettingsPanel.Visibility = _viewModel.GroqSettingsVisibility;
             FireworksSettingsPanel.Visibility = _viewModel.FireworksSettingsVisibility;
             DeepgramSettingsPanel.Visibility = _viewModel.DeepgramSettingsVisibility;
             MistralSettingsPanel.Visibility = _viewModel.MistralSettingsVisibility;
             CohereSettingsPanel.Visibility = _viewModel.CohereSettingsVisibility;
+            AquaVoiceSettingsPanel.Visibility = _viewModel.AquaVoiceSettingsVisibility;
             RestoreStatusText();
             HotkeyWarningTextBlock.Text = _viewModel.HotkeyWarningMessage;
             HotkeyWarningTextBlock.Visibility = _viewModel.HotkeyWarningVisibility;
@@ -472,6 +478,7 @@ public sealed partial class MainWindow : Window
         _viewModel.DeepgramApiKey = DeepgramApiKeyBox.Password;
         _viewModel.MistralApiKey = MistralApiKeyBox.Password;
         _viewModel.CohereApiKey = CohereApiKeyBox.Password;
+        _viewModel.AquaVoiceApiKey = AquaVoiceApiKeyBox.Password;
         _viewModel.DeepgramStreamingEnabled = DeepgramStreamingToggle.IsOn;
         _viewModel.MistralRealtimeEnabled = MistralRealtimeToggle.IsOn;
         _viewModel.MistralRealtimeMode = MistralRealtimeModeComboBox.SelectedIndex == 1
@@ -487,6 +494,8 @@ public sealed partial class MainWindow : Window
         _viewModel.SelectedDeepgramModel = DeepgramModelComboBox.SelectedItem as string ?? _viewModel.AvailableDeepgramModels[0];
         _viewModel.SelectedCohereModel = CohereModelComboBox.SelectedItem as string ?? _viewModel.AvailableCohereModels[0];
         _viewModel.CohereLanguage = CohereLanguageTextBox.Text;
+        _viewModel.SelectedAquaVoiceModel = AquaVoiceModelComboBox.SelectedItem as string ?? _viewModel.AvailableAquaVoiceModels[0];
+        _viewModel.AquaVoiceLanguage = AquaVoiceLanguageTextBox.Text;
     }
 
     private TranscriptionProvider GetSelectedProviderFromControls()
@@ -494,6 +503,11 @@ public sealed partial class MainWindow : Window
         if (MistralProviderRadioButton.IsChecked == true)
         {
             return TranscriptionProvider.Mistral;
+        }
+
+        if (AquaVoiceProviderRadioButton.IsChecked == true)
+        {
+            return TranscriptionProvider.AquaVoice;
         }
 
         if (CohereProviderRadioButton.IsChecked == true)

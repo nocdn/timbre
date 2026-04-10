@@ -16,6 +16,8 @@ public sealed class AppSettings
 
     public string? CohereApiKey { get; init; }
 
+    public string? AquaVoiceApiKey { get; init; }
+
     public HotkeyBinding Hotkey { get; init; } = HotkeyBinding.Default;
 
     public HotkeyBinding PasteLastTranscriptHotkey { get; init; } = HotkeyBinding.PasteLastTranscriptDefault;
@@ -51,6 +53,10 @@ public sealed class AppSettings
     public string CohereModel { get; init; } = "cohere-transcribe-03-2026";
 
     public string CohereLanguage { get; init; } = "en";
+
+    public string AquaVoiceModel { get; init; } = "avalon-v1-en";
+
+    public string AquaVoiceLanguage { get; init; } = "en";
 
     public bool HasCompletedInitialSetup { get; init; }
 }

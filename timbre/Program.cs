@@ -96,6 +96,14 @@ public static class Program
             };
             return new CohereTranscriptionClient(httpClient);
         });
+        services.AddSingleton<AquaVoiceTranscriptionClient>(_ =>
+        {
+            var httpClient = new HttpClient
+            {
+                Timeout = TimeSpan.FromMinutes(2),
+            };
+            return new AquaVoiceTranscriptionClient(httpClient);
+        });
         services.AddSingleton<DeepgramStreamingTranscriptionClient>();
         services.AddSingleton<MistralRealtimeTranscriptionClient>();
         services.AddSingleton<ITranscriptionClientFactory, TranscriptionClientFactory>();

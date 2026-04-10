@@ -154,6 +154,11 @@
                                     Checked="ProviderRadioButton_Checked"
                                     Content="Cohere"
                                     GroupName="ProviderGroup" />
+                                <RadioButton
+                                    x:Name="AquaVoiceProviderRadioButton"
+                                    Checked="ProviderRadioButton_Checked"
+                                    Content="AquaVoice"
+                                    GroupName="ProviderGroup" />
                             </StackPanel>
                         </StackPanel>
                     </StackPanel>
@@ -313,6 +318,38 @@
                             <TextBlock
                                 Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                 Text="Use an ISO-639-1 code like 'en'. Cohere requires an explicit language value. Docs: https://docs.cohere.com/reference/create-audio-transcription"
+                                TextWrapping="WrapWholeWords" />
+                        </StackPanel>
+                    </StackPanel>
+                </StackPanel>
+
+                <StackPanel
+                    x:Name="AquaVoiceSettingsPanel"
+                    Spacing="14">
+                    <TextBlock
+                        Text="AquaVoice settings"
+                        Style="{ThemeResource SubtitleTextBlockStyle}" />
+                    <StackPanel Spacing="14">
+                        <PasswordBox
+                            x:Name="AquaVoiceApiKeyBox"
+                            PasswordChanged="SettingsPasswordBox_PasswordChanged"
+                            Header="AquaVoice API key" />
+
+                        <ComboBox
+                            x:Name="AquaVoiceModelComboBox"
+                            SelectionChanged="SettingsComboBox_SelectionChanged"
+                            Header="AquaVoice model"
+                            PlaceholderText="Select an AquaVoice model" />
+
+                        <StackPanel Spacing="6">
+                            <TextBox
+                                x:Name="AquaVoiceLanguageTextBox"
+                                Header="Language"
+                                TextChanged="SettingsTextBox_TextChanged"
+                                PlaceholderText="en" />
+                            <TextBlock
+                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                Text="Currently only English ('en') is supported. Docs: https://docs.aquavoice.com"
                                 TextWrapping="WrapWholeWords" />
                         </StackPanel>
                     </StackPanel>

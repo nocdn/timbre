@@ -31,6 +31,10 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     [
         "cohere-transcribe-03-2026",
     ];
+    private static readonly string[] AquaVoiceModels =
+    [
+        "avalon-v1-en",
+    ];
 
     private readonly IAppSettingsStore _settingsStore;
     private readonly IAudioDeviceService _audioDeviceService;
@@ -47,6 +51,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private string _deepgramApiKey = string.Empty;
     private string _mistralApiKey = string.Empty;
     private string _cohereApiKey = string.Empty;
+    private string _aquaVoiceApiKey = string.Empty;
     private bool _deepgramStreamingEnabled = true;
     private bool _mistralRealtimeEnabled;
     private bool _pushToTalk = true;
@@ -62,6 +67,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private MistralRealtimeMode _mistralRealtimeMode = MistralRealtimeMode.Fast;
     private string _selectedCohereModel = CohereModels[0];
     private string _cohereLanguage = "en";
+    private string _selectedAquaVoiceModel = AquaVoiceModels[0];
+    private string _aquaVoiceLanguage = "en";
     private string _recordingHotkeyDisplay = HotkeyBinding.Default.ToDisplayString();
     private string _pasteLastTranscriptHotkeyDisplay = HotkeyBinding.PasteLastTranscriptDefault.ToDisplayString();
     private string _openHistoryHotkeyDisplay = HotkeyBinding.OpenHistoryDefault.ToDisplayString();
@@ -110,6 +117,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
     public IReadOnlyList<string> AvailableCohereModels => CohereModels;
 
+    public IReadOnlyList<string> AvailableAquaVoiceModels => AquaVoiceModels;
+
     public TranscriptionProvider SelectedProvider
     {
         get => _selectedProvider;
@@ -122,11 +131,13 @@ public sealed class MainViewModel : ObservableObject, IDisposable
                 OnPropertyChanged(nameof(IsDeepgramSelected));
                 OnPropertyChanged(nameof(IsMistralSelected));
                 OnPropertyChanged(nameof(IsCohereSelected));
+                OnPropertyChanged(nameof(IsAquaVoiceSelected));
                 OnPropertyChanged(nameof(GroqSettingsVisibility));
                 OnPropertyChanged(nameof(FireworksSettingsVisibility));
                 OnPropertyChanged(nameof(DeepgramSettingsVisibility));
                 OnPropertyChanged(nameof(MistralSettingsVisibility));
                 OnPropertyChanged(nameof(CohereSettingsVisibility));
+                OnPropertyChanged(nameof(AquaVoiceSettingsVisibility));
             }
         }
     }
@@ -141,6 +152,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
     public bool IsCohereSelected => SelectedProvider == TranscriptionProvider.Cohere;
 
+    public bool IsAquaVoiceSelected => SelectedProvider == TranscriptionProvider.AquaVoice;
+
     public Visibility GroqSettingsVisibility => IsGroqSelected ? Visibility.Visible : Visibility.Collapsed;
 
     public Visibility FireworksSettingsVisibility => IsFireworksSelected ? Visibility.Visible : Visibility.Collapsed;
@@ -150,6 +163,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     public Visibility MistralSettingsVisibility => IsMistralSelected ? Visibility.Visible : Visibility.Collapsed;
 
     public Visibility CohereSettingsVisibility => IsCohereSelected ? Visibility.Visible : Visibility.Collapsed;
+
+    public Visibility AquaVoiceSettingsVisibility => IsAquaVoiceSelected ? Visibility.Visible : Visibility.Collapsed;
 
     public AudioInputDevice? SelectedInputDevice
     {
@@ -185,6 +200,12 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     {
         get => _cohereApiKey;
         set => SetProperty(ref _cohereApiKey, value);
+    }
+
+    public string AquaVoiceApiKey
+    {
+        get => _aquaVoiceApiKey;
+        set => SetProperty(ref _aquaVoiceApiKey, value);
     }
 
     public bool DeepgramStreamingEnabled
@@ -293,6 +314,18 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     {
         get => _cohereLanguage;
         set => SetProperty(ref _cohereLanguage, value);
+    }
+
+    public string SelectedAquaVoiceModel
+    {
+        get => _selectedAquaVoiceModel;
+        set => SetProperty(ref _selectedAquaVoiceModel, value);
+    }
+
+    public string AquaVoiceLanguage
+    {
+        get => _aquaVoiceLanguage;
+        set => SetProperty(ref _aquaVoiceLanguage, value);
     }
 
     public string RecordingHotkeyDisplay
@@ -518,6 +551,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         DeepgramApiKey = settings.DeepgramApiKey ?? string.Empty;
         MistralApiKey = settings.MistralApiKey ?? string.Empty;
         CohereApiKey = settings.CohereApiKey ?? string.Empty;
+        AquaVoiceApiKey = settings.AquaVoiceApiKey ?? string.Empty;
         DeepgramStreamingEnabled = settings.DeepgramStreamingEnabled;
         MistralRealtimeEnabled = settings.MistralRealtimeEnabled;
         MistralRealtimeMode = settings.MistralRealtimeMode;
@@ -533,6 +567,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         SelectedDeepgramModel = AvailableDeepgramModels.FirstOrDefault(model => model == settings.DeepgramModel) ?? GetDefaultDeepgramModel(settings.DeepgramStreamingEnabled);
         SelectedCohereModel = CohereModels.FirstOrDefault(model => model == settings.CohereModel) ?? CohereModels[0];
         CohereLanguage = NormalizeLanguage(settings.CohereLanguage);
+        SelectedAquaVoiceModel = AquaVoiceModels.FirstOrDefault(model => model == settings.AquaVoiceModel) ?? AquaVoiceModels[0];
+        AquaVoiceLanguage = NormalizeLanguage(settings.AquaVoiceLanguage);
         _pendingHotkey = settings.Hotkey;
         _pendingPasteLastTranscriptHotkey = settings.PasteLastTranscriptHotkey;
         _pendingOpenHistoryHotkey = settings.OpenHistoryHotkey;
@@ -553,6 +589,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             DeepgramApiKey = DeepgramApiKey.Trim(),
             MistralApiKey = MistralApiKey.Trim(),
             CohereApiKey = CohereApiKey.Trim(),
+            AquaVoiceApiKey = AquaVoiceApiKey.Trim(),
             Hotkey = _pendingHotkey,
             PasteLastTranscriptHotkey = _pendingPasteLastTranscriptHotkey,
             OpenHistoryHotkey = _pendingOpenHistoryHotkey,
@@ -571,6 +608,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             MistralRealtimeMode = MistralRealtimeMode,
             CohereModel = string.IsNullOrWhiteSpace(SelectedCohereModel) ? CohereModels[0] : SelectedCohereModel,
             CohereLanguage = NormalizeLanguage(CohereLanguage),
+            AquaVoiceModel = string.IsNullOrWhiteSpace(SelectedAquaVoiceModel) ? AquaVoiceModels[0] : SelectedAquaVoiceModel,
+            AquaVoiceLanguage = NormalizeLanguage(AquaVoiceLanguage),
             HasCompletedInitialSetup = true,
         };
     }
@@ -669,6 +708,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
                string.Equals(left.DeepgramApiKey, right.DeepgramApiKey, StringComparison.Ordinal) &&
                string.Equals(left.MistralApiKey, right.MistralApiKey, StringComparison.Ordinal) &&
                string.Equals(left.CohereApiKey, right.CohereApiKey, StringComparison.Ordinal) &&
+               string.Equals(left.AquaVoiceApiKey, right.AquaVoiceApiKey, StringComparison.Ordinal) &&
                Equals(left.Hotkey, right.Hotkey) &&
                Equals(left.PasteLastTranscriptHotkey, right.PasteLastTranscriptHotkey) &&
                Equals(left.OpenHistoryHotkey, right.OpenHistoryHotkey) &&
@@ -687,6 +727,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
                left.MistralRealtimeMode == right.MistralRealtimeMode &&
                string.Equals(left.CohereModel, right.CohereModel, StringComparison.Ordinal) &&
                string.Equals(left.CohereLanguage, right.CohereLanguage, StringComparison.Ordinal) &&
+               string.Equals(left.AquaVoiceModel, right.AquaVoiceModel, StringComparison.Ordinal) &&
+               string.Equals(left.AquaVoiceLanguage, right.AquaVoiceLanguage, StringComparison.Ordinal) &&
                left.HasCompletedInitialSetup == right.HasCompletedInitialSetup;
     }
 

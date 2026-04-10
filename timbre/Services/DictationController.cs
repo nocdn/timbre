@@ -610,6 +610,7 @@ public sealed class DictationController : IDictationController
             TranscriptionProvider.Deepgram => settings.DeepgramApiKey ?? string.Empty,
             TranscriptionProvider.Mistral => settings.MistralApiKey ?? string.Empty,
             TranscriptionProvider.Cohere => settings.CohereApiKey ?? string.Empty,
+            TranscriptionProvider.AquaVoice => settings.AquaVoiceApiKey ?? string.Empty,
             _ => settings.GroqApiKey ?? string.Empty,
         };
     }
@@ -622,6 +623,7 @@ public sealed class DictationController : IDictationController
             TranscriptionProvider.Deepgram => settings.DeepgramModel,
             TranscriptionProvider.Mistral => settings.MistralRealtimeEnabled ? MistralRealtimeModel : MistralOfflineModel,
             TranscriptionProvider.Cohere => settings.CohereModel,
+            TranscriptionProvider.AquaVoice => settings.AquaVoiceModel,
             _ => settings.GroqModel,
         };
     }
@@ -634,6 +636,7 @@ public sealed class DictationController : IDictationController
             TranscriptionProvider.Deepgram => settings.DeepgramLanguage,
             TranscriptionProvider.Mistral => "en",
             TranscriptionProvider.Cohere => settings.CohereLanguage,
+            TranscriptionProvider.AquaVoice => settings.AquaVoiceLanguage,
             _ => settings.GroqLanguage,
         };
     }
