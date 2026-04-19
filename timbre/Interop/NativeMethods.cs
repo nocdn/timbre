@@ -16,6 +16,7 @@ internal static class NativeMethods
     public const uint WM_SIZE = 0x0005;
     public const uint WM_CLOSE = 0x0010;
     public const uint WM_SYSCOMMAND = 0x0112;
+    public const uint WM_TIMER = 0x0113;
     public const uint WM_CONTEXTMENU = 0x007B;
     public const uint WM_KEYDOWN = 0x0100;
     public const uint WM_KEYUP = 0x0101;
@@ -33,6 +34,7 @@ internal static class NativeMethods
 
     public const int SIZE_MINIMIZED = 1;
     public const int SW_HIDE = 0;
+    public const int SW_SHOWNOACTIVATE = 4;
     public const int SW_RESTORE = 9;
 
     public const int SC_MINIMIZE = 0xF020;
@@ -81,6 +83,8 @@ internal static class NativeMethods
     public const uint MB_OK = 0x00000000;
     public const uint IMAGE_ICON = 1;
     public const uint LR_LOADFROMFILE = 0x00000010;
+    public const uint WS_POPUP = 0x80000000;
+    public const uint WS_EX_TOOLWINDOW = 0x00000080;
 
     public const int IDI_APPLICATION = 32512;
     public const int SM_CXSMICON = 49;
@@ -267,6 +271,13 @@ internal static class NativeMethods
         IntPtr wParam,
         IntPtr lParam);
 
+    [DllImport("user32.dll", EntryPoint = "DefWindowProcW")]
+    public static extern IntPtr DefWindowProc(
+        IntPtr hWnd,
+        uint msg,
+        IntPtr wParam,
+        IntPtr lParam);
+
     [DllImport("user32.dll", EntryPoint = "SetWindowLongPtrW", SetLastError = true)]
     private static extern IntPtr SetWindowLongPtr64(IntPtr hWnd, int nIndex, WndProc dwNewLong);
 
@@ -295,6 +306,32 @@ internal static class NativeMethods
 
     [DllImport("user32.dll", SetLastError = true)]
     public static extern uint SendInput(uint nInputs, INPUT[] pInputs, int cbSize);
+
+    [DllImport("user32.dll", EntryPoint = "CreateWindowExW", CharSet = CharSet.Unicode, SetLastError = true)]
+    public static extern IntPtr CreateWindowEx(
+        uint dwExStyle,
+        string lpClassName,
+        string lpWindowName,
+        uint dwStyle,
+        int x,
+        int y,
+        int nWidth,
+        int nHeight,
+        IntPtr hWndParent,
+        IntPtr hMenu,
+        IntPtr hInstance,
+        IntPtr lpParam);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool DestroyWindow(IntPtr hWnd);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    public static extern IntPtr SetTimer(IntPtr hWnd, UIntPtr nIDEvent, uint uElapse, IntPtr lpTimerFunc);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool KillTimer(IntPtr hWnd, UIntPtr uIDEvent);
 
     [DllImport("user32.dll")]
     public static extern short VkKeyScan(char ch);

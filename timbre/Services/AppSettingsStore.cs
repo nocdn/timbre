@@ -79,6 +79,8 @@ public sealed class AppSettingsStore : IAppSettingsStore
                 LaunchAtStartup = storedSettings.LaunchAtStartup ?? false,
                 SoundFeedbackEnabled = storedSettings.SoundFeedbackEnabled ?? true,
                 LlmPostProcessingPrompt = NormalizeLlmPostProcessingPrompt(storedSettings.LlmPostProcessingPrompt),
+                FetchedCerebrasModels = NormalizeFetchedModelList(storedSettings.FetchedCerebrasModels),
+                FetchedLlmGroqModels = NormalizeFetchedModelList(storedSettings.FetchedLlmGroqModels),
                 CerebrasModel = string.IsNullOrWhiteSpace(storedSettings.CerebrasModel)
                     ? LlmPostProcessingCatalog.DefaultCerebrasModel
                     : storedSettings.CerebrasModel,
@@ -106,7 +108,7 @@ public sealed class AppSettingsStore : IAppSettingsStore
             };
 
             DiagnosticsLogger.Info(
-                $"Settings loaded. SelectedInputDeviceId='{_currentSettings.SelectedInputDeviceId}', Provider='{_currentSettings.Provider}', LlmPostProcessingEnabled={_currentSettings.LlmPostProcessingEnabled}, LlmPostProcessingProvider='{_currentSettings.LlmPostProcessingProvider}', HasGroqApiKey={!string.IsNullOrWhiteSpace(_currentSettings.GroqApiKey)}, HasCerebrasApiKey={!string.IsNullOrWhiteSpace(_currentSettings.CerebrasApiKey)}, HasLlmGroqApiKey={!string.IsNullOrWhiteSpace(_currentSettings.LlmGroqApiKey)}, HasFireworksApiKey={!string.IsNullOrWhiteSpace(_currentSettings.FireworksApiKey)}, HasDeepgramApiKey={!string.IsNullOrWhiteSpace(_currentSettings.DeepgramApiKey)}, HasMistralApiKey={!string.IsNullOrWhiteSpace(_currentSettings.MistralApiKey)}, HasCohereApiKey={!string.IsNullOrWhiteSpace(_currentSettings.CohereApiKey)}, Hotkey='{_currentSettings.Hotkey.ToDisplayString()}', PasteLastTranscriptHotkey='{_currentSettings.PasteLastTranscriptHotkey.ToDisplayString()}', OpenHistoryHotkey='{_currentSettings.OpenHistoryHotkey.ToDisplayString()}', TranscriptHistoryLimit={_currentSettings.TranscriptHistoryLimit}, PushToTalk={_currentSettings.PushToTalk}, LaunchAtStartup={_currentSettings.LaunchAtStartup}, SoundFeedbackEnabled={_currentSettings.SoundFeedbackEnabled}, LlmPromptLength={_currentSettings.LlmPostProcessingPrompt.Length}, CerebrasModel='{_currentSettings.CerebrasModel}', LlmGroqModel='{_currentSettings.LlmGroqModel}', GroqModel='{_currentSettings.GroqModel}', GroqLanguage='{_currentSettings.GroqLanguage}', FireworksModel='{_currentSettings.FireworksModel}', FireworksLanguage='{_currentSettings.FireworksLanguage}', DeepgramModel='{_currentSettings.DeepgramModel}', DeepgramLanguage='{_currentSettings.DeepgramLanguage}', DeepgramStreamingEnabled={_currentSettings.DeepgramStreamingEnabled}, MistralRealtimeEnabled={_currentSettings.MistralRealtimeEnabled}, MistralRealtimeMode={_currentSettings.MistralRealtimeMode}, CohereModel='{_currentSettings.CohereModel}', CohereLanguage='{_currentSettings.CohereLanguage}', HasCompletedInitialSetup={_currentSettings.HasCompletedInitialSetup}.");
+                $"Settings loaded. SelectedInputDeviceId='{_currentSettings.SelectedInputDeviceId}', Provider='{_currentSettings.Provider}', LlmPostProcessingEnabled={_currentSettings.LlmPostProcessingEnabled}, LlmPostProcessingProvider='{_currentSettings.LlmPostProcessingProvider}', HasGroqApiKey={!string.IsNullOrWhiteSpace(_currentSettings.GroqApiKey)}, HasCerebrasApiKey={!string.IsNullOrWhiteSpace(_currentSettings.CerebrasApiKey)}, HasLlmGroqApiKey={!string.IsNullOrWhiteSpace(_currentSettings.LlmGroqApiKey)}, HasFireworksApiKey={!string.IsNullOrWhiteSpace(_currentSettings.FireworksApiKey)}, HasDeepgramApiKey={!string.IsNullOrWhiteSpace(_currentSettings.DeepgramApiKey)}, HasMistralApiKey={!string.IsNullOrWhiteSpace(_currentSettings.MistralApiKey)}, HasCohereApiKey={!string.IsNullOrWhiteSpace(_currentSettings.CohereApiKey)}, Hotkey='{_currentSettings.Hotkey.ToDisplayString()}', PasteLastTranscriptHotkey='{_currentSettings.PasteLastTranscriptHotkey.ToDisplayString()}', OpenHistoryHotkey='{_currentSettings.OpenHistoryHotkey.ToDisplayString()}', TranscriptHistoryLimit={_currentSettings.TranscriptHistoryLimit}, PushToTalk={_currentSettings.PushToTalk}, LaunchAtStartup={_currentSettings.LaunchAtStartup}, SoundFeedbackEnabled={_currentSettings.SoundFeedbackEnabled}, LlmPromptLength={_currentSettings.LlmPostProcessingPrompt.Length}, FetchedCerebrasModelCount={_currentSettings.FetchedCerebrasModels?.Count ?? 0}, FetchedLlmGroqModelCount={_currentSettings.FetchedLlmGroqModels?.Count ?? 0}, CerebrasModel='{_currentSettings.CerebrasModel}', LlmGroqModel='{_currentSettings.LlmGroqModel}', GroqModel='{_currentSettings.GroqModel}', GroqLanguage='{_currentSettings.GroqLanguage}', FireworksModel='{_currentSettings.FireworksModel}', FireworksLanguage='{_currentSettings.FireworksLanguage}', DeepgramModel='{_currentSettings.DeepgramModel}', DeepgramLanguage='{_currentSettings.DeepgramLanguage}', DeepgramStreamingEnabled={_currentSettings.DeepgramStreamingEnabled}, MistralRealtimeEnabled={_currentSettings.MistralRealtimeEnabled}, MistralRealtimeMode={_currentSettings.MistralRealtimeMode}, CohereModel='{_currentSettings.CohereModel}', CohereLanguage='{_currentSettings.CohereLanguage}', HasCompletedInitialSetup={_currentSettings.HasCompletedInitialSetup}.");
 
             _hasLoadedSettings = true;
             return _currentSettings;
@@ -132,7 +134,7 @@ public sealed class AppSettingsStore : IAppSettingsStore
         try
         {
             DiagnosticsLogger.Info(
-                $"Saving settings. SelectedInputDeviceId='{settings.SelectedInputDeviceId}', Provider='{settings.Provider}', LlmPostProcessingEnabled={settings.LlmPostProcessingEnabled}, LlmPostProcessingProvider='{settings.LlmPostProcessingProvider}', HasGroqApiKey={!string.IsNullOrWhiteSpace(settings.GroqApiKey)}, HasCerebrasApiKey={!string.IsNullOrWhiteSpace(settings.CerebrasApiKey)}, HasLlmGroqApiKey={!string.IsNullOrWhiteSpace(settings.LlmGroqApiKey)}, HasFireworksApiKey={!string.IsNullOrWhiteSpace(settings.FireworksApiKey)}, HasDeepgramApiKey={!string.IsNullOrWhiteSpace(settings.DeepgramApiKey)}, HasMistralApiKey={!string.IsNullOrWhiteSpace(settings.MistralApiKey)}, HasCohereApiKey={!string.IsNullOrWhiteSpace(settings.CohereApiKey)}, Hotkey='{settings.Hotkey.ToDisplayString()}', PasteLastTranscriptHotkey='{settings.PasteLastTranscriptHotkey.ToDisplayString()}', OpenHistoryHotkey='{settings.OpenHistoryHotkey.ToDisplayString()}', TranscriptHistoryLimit={settings.TranscriptHistoryLimit}, PushToTalk={settings.PushToTalk}, LaunchAtStartup={settings.LaunchAtStartup}, SoundFeedbackEnabled={settings.SoundFeedbackEnabled}, LlmPromptLength={settings.LlmPostProcessingPrompt.Length}, CerebrasModel='{settings.CerebrasModel}', LlmGroqModel='{settings.LlmGroqModel}', GroqModel='{settings.GroqModel}', GroqLanguage='{settings.GroqLanguage}', FireworksModel='{settings.FireworksModel}', FireworksLanguage='{settings.FireworksLanguage}', DeepgramModel='{settings.DeepgramModel}', DeepgramLanguage='{settings.DeepgramLanguage}', DeepgramStreamingEnabled={settings.DeepgramStreamingEnabled}, MistralRealtimeEnabled={settings.MistralRealtimeEnabled}, MistralRealtimeMode={settings.MistralRealtimeMode}, CohereModel='{settings.CohereModel}', CohereLanguage='{settings.CohereLanguage}'.");
+                $"Saving settings. SelectedInputDeviceId='{settings.SelectedInputDeviceId}', Provider='{settings.Provider}', LlmPostProcessingEnabled={settings.LlmPostProcessingEnabled}, LlmPostProcessingProvider='{settings.LlmPostProcessingProvider}', HasGroqApiKey={!string.IsNullOrWhiteSpace(settings.GroqApiKey)}, HasCerebrasApiKey={!string.IsNullOrWhiteSpace(settings.CerebrasApiKey)}, HasLlmGroqApiKey={!string.IsNullOrWhiteSpace(settings.LlmGroqApiKey)}, HasFireworksApiKey={!string.IsNullOrWhiteSpace(settings.FireworksApiKey)}, HasDeepgramApiKey={!string.IsNullOrWhiteSpace(settings.DeepgramApiKey)}, HasMistralApiKey={!string.IsNullOrWhiteSpace(settings.MistralApiKey)}, HasCohereApiKey={!string.IsNullOrWhiteSpace(settings.CohereApiKey)}, Hotkey='{settings.Hotkey.ToDisplayString()}', PasteLastTranscriptHotkey='{settings.PasteLastTranscriptHotkey.ToDisplayString()}', OpenHistoryHotkey='{settings.OpenHistoryHotkey.ToDisplayString()}', TranscriptHistoryLimit={settings.TranscriptHistoryLimit}, PushToTalk={settings.PushToTalk}, LaunchAtStartup={settings.LaunchAtStartup}, SoundFeedbackEnabled={settings.SoundFeedbackEnabled}, LlmPromptLength={settings.LlmPostProcessingPrompt.Length}, FetchedCerebrasModelCount={settings.FetchedCerebrasModels?.Count ?? 0}, FetchedLlmGroqModelCount={settings.FetchedLlmGroqModels?.Count ?? 0}, CerebrasModel='{settings.CerebrasModel}', LlmGroqModel='{settings.LlmGroqModel}', GroqModel='{settings.GroqModel}', GroqLanguage='{settings.GroqLanguage}', FireworksModel='{settings.FireworksModel}', FireworksLanguage='{settings.FireworksLanguage}', DeepgramModel='{settings.DeepgramModel}', DeepgramLanguage='{settings.DeepgramLanguage}', DeepgramStreamingEnabled={settings.DeepgramStreamingEnabled}, MistralRealtimeEnabled={settings.MistralRealtimeEnabled}, MistralRealtimeMode={settings.MistralRealtimeMode}, CohereModel='{settings.CohereModel}', CohereLanguage='{settings.CohereLanguage}'.");
             var storedSettings = new StoredSettings
             {
                 SelectedInputDeviceId = settings.SelectedInputDeviceId,
@@ -154,6 +156,8 @@ public sealed class AppSettingsStore : IAppSettingsStore
                 LaunchAtStartup = settings.LaunchAtStartup,
                 SoundFeedbackEnabled = settings.SoundFeedbackEnabled,
                 LlmPostProcessingPrompt = NormalizeLlmPostProcessingPrompt(settings.LlmPostProcessingPrompt),
+                FetchedCerebrasModels = NormalizeFetchedModelList(settings.FetchedCerebrasModels),
+                FetchedLlmGroqModels = NormalizeFetchedModelList(settings.FetchedLlmGroqModels),
                 CerebrasModel = string.IsNullOrWhiteSpace(settings.CerebrasModel) ? LlmPostProcessingCatalog.DefaultCerebrasModel : settings.CerebrasModel,
                 LlmGroqModel = string.IsNullOrWhiteSpace(settings.LlmGroqModel) ? LlmPostProcessingCatalog.DefaultGroqModel : settings.LlmGroqModel,
                 GroqModel = settings.GroqModel,
@@ -193,6 +197,8 @@ public sealed class AppSettingsStore : IAppSettingsStore
                 LaunchAtStartup = settings.LaunchAtStartup,
                 SoundFeedbackEnabled = settings.SoundFeedbackEnabled,
                 LlmPostProcessingPrompt = NormalizeLlmPostProcessingPrompt(settings.LlmPostProcessingPrompt),
+                FetchedCerebrasModels = NormalizeFetchedModelList(settings.FetchedCerebrasModels),
+                FetchedLlmGroqModels = NormalizeFetchedModelList(settings.FetchedLlmGroqModels),
                 CerebrasModel = string.IsNullOrWhiteSpace(settings.CerebrasModel) ? LlmPostProcessingCatalog.DefaultCerebrasModel : settings.CerebrasModel,
                 LlmGroqModel = string.IsNullOrWhiteSpace(settings.LlmGroqModel) ? LlmPostProcessingCatalog.DefaultGroqModel : settings.LlmGroqModel,
                 GroqModel = settings.GroqModel,
@@ -233,6 +239,33 @@ public sealed class AppSettingsStore : IAppSettingsStore
         return string.IsNullOrWhiteSpace(value)
             ? LlmPostProcessingCatalog.DefaultPrompt
             : value.Trim();
+    }
+
+    private static List<string>? NormalizeFetchedModelList(IReadOnlyList<string>? models)
+    {
+        if (models is null || models.Count == 0)
+        {
+            return null;
+        }
+
+        var normalizedModels = new List<string>();
+        foreach (var model in models)
+        {
+            if (string.IsNullOrWhiteSpace(model))
+            {
+                continue;
+            }
+
+            var normalizedModel = model.Trim();
+            if (normalizedModels.Contains(normalizedModel, StringComparer.Ordinal))
+            {
+                continue;
+            }
+
+            normalizedModels.Add(normalizedModel);
+        }
+
+        return normalizedModels.Count == 0 ? null : normalizedModels;
     }
 
     private static bool InferDeepgramStreamingEnabled(string? model)
@@ -341,6 +374,10 @@ public sealed class AppSettingsStore : IAppSettingsStore
         public bool? SoundFeedbackEnabled { get; set; }
 
         public string? LlmPostProcessingPrompt { get; set; }
+
+        public List<string>? FetchedCerebrasModels { get; set; }
+
+        public List<string>? FetchedLlmGroqModels { get; set; }
 
         public string? CerebrasModel { get; set; }
 

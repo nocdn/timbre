@@ -90,5 +90,7 @@ installer\bin\Release\timbre.installer.msi
 - **ALWAYS build and run tests after modifying code.** Do not assume your changes work without verifying they compile and pass existing tests.
 - **Add tests for new features:** If you are implementing new logic, adding new models, or fixing complex bugs, always consider writing or updating tests in the `timbre.tests` project (using xUnit, Moq, and FluentAssertions).
 - Prefer using the full `dotnet` path if command execution says `dotnet` is not recognized.
+- For WinUI settings rows with paired controls like `TextBox`/`ComboBox` plus a trailing action button, use `Spacing="8"` on the horizontal container to match the existing settings layout.
+- Tray icon context menu reliability was fixed by giving it a dedicated hidden native owner window in `TrayIconService` and de-duping `WM_CONTEXTMENU`/`WM_RBUTTONUP`; avoid reworking that tray/menu path unless you have a clear, reproducible bug.
 - When changing WinUI input/focus behavior, build after edits because some issues only show up at compile/runtime.
 - If asked to diagnose crashes around settings input, check the latest log in `%LOCALAPPDATA%\Timbre\logs\` before guessing.

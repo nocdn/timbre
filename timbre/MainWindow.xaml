@@ -390,15 +390,23 @@
                             PasswordChanged="SettingsPasswordBox_PasswordChanged"
                             Header="Cerebras API key" />
 
-                        <ComboBox
-                            x:Name="CerebrasModelComboBox"
-                            SelectionChanged="SettingsComboBox_SelectionChanged"
-                            Header="Cerebras model"
-                            PlaceholderText="Select a Cerebras model" />
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <ComboBox
+                                x:Name="CerebrasModelComboBox"
+                                Width="420"
+                                SelectionChanged="SettingsComboBox_SelectionChanged"
+                                Header="Cerebras model"
+                                PlaceholderText="Select a Cerebras model" />
+                            <Button
+                                x:Name="FetchCerebrasModelsButton"
+                                Margin="0,28,0,0"
+                                Click="FetchCerebrasModelsButton_Click"
+                                Content="Fetch" />
+                        </StackPanel>
 
                         <TextBlock
                             Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                            Text="Uses Cerebras chat completions. Current official models are gpt-oss-120b, llama3.1-8b, qwen-3-235b-a22b-instruct-2507, and zai-glm-4.7. Docs: https://inference-docs.cerebras.ai/api-reference/chat-completions"
+                            Text="Uses Cerebras chat completions. Docs: https://inference-docs.cerebras.ai/api-reference/chat-completions and https://api.cerebras.ai/v1/models"
                             TextWrapping="WrapWholeWords" />
                     </StackPanel>
                 </StackPanel>
@@ -415,15 +423,23 @@
                             PasswordChanged="SettingsPasswordBox_PasswordChanged"
                             Header="Groq API key" />
 
-                        <ComboBox
-                            x:Name="LlmGroqModelComboBox"
-                            SelectionChanged="SettingsComboBox_SelectionChanged"
-                            Header="Groq model"
-                            PlaceholderText="Select a Groq model" />
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <ComboBox
+                                x:Name="LlmGroqModelComboBox"
+                                Width="420"
+                                SelectionChanged="SettingsComboBox_SelectionChanged"
+                                Header="Groq model"
+                                PlaceholderText="Select a Groq model" />
+                            <Button
+                                x:Name="FetchLlmGroqModelsButton"
+                                Margin="0,28,0,0"
+                                Click="FetchLlmGroqModelsButton_Click"
+                                Content="Fetch" />
+                        </StackPanel>
 
                         <TextBlock
                             Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                            Text="Uses Groq chat completions. This dropdown includes the current official text models that fit transcript cleanup, including GPT OSS, Llama, and Qwen options. Docs: https://console.groq.com/docs/models and https://console.groq.com/docs/api-reference"
+                            Text="Uses Groq chat completions. Docs: https://console.groq.com/docs/api-reference and https://api.groq.com/openai/v1/models"
                             TextWrapping="WrapWholeWords" />
                     </StackPanel>
                 </StackPanel>

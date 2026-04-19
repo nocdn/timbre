@@ -40,6 +40,10 @@ public sealed class AppSettings
 
     public string LlmPostProcessingPrompt { get; init; } = LlmPostProcessingCatalog.DefaultPrompt;
 
+    public IReadOnlyList<string>? FetchedCerebrasModels { get; init; }
+
+    public IReadOnlyList<string>? FetchedLlmGroqModels { get; init; }
+
     public string CerebrasModel { get; init; } = LlmPostProcessingCatalog.DefaultCerebrasModel;
 
     public string LlmGroqModel { get; init; } = LlmPostProcessingCatalog.DefaultGroqModel;

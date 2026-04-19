@@ -9,8 +9,6 @@ namespace timbre.ViewModels;
 
 public sealed class MainViewModel : ObservableObject, IDisposable
 {
-    private static readonly IReadOnlyList<string> CerebrasModels = LlmPostProcessingCatalog.CerebrasModels;
-    private static readonly IReadOnlyList<string> LlmGroqModels = LlmPostProcessingCatalog.GroqModels;
     private static readonly string[] GroqModels =
     [
         "whisper-large-v3-turbo",
@@ -40,6 +38,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private readonly IClipboardPasteService _clipboardPasteService;
     private readonly IDictationController _dictationController;
     private readonly ILaunchAtStartupService _launchAtStartupService;
+    private readonly LlmModelCatalogClient _llmModelCatalogClient;
     private readonly IUiDispatcherQueueAccessor _uiDispatcherQueueAccessor;
 
     private AudioInputDevice? _selectedInputDevice;
@@ -80,6 +79,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private bool _isHistoryEmpty = true;
     private DictationState _dictationState = DictationState.Idle;
     private bool _isInitialized;
+    private List<string>? _fetchedCerebrasModels;
+    private List<string>? _fetchedLlmGroqModels;
     private HotkeyBinding _pendingHotkey = HotkeyBinding.Default;
     private HotkeyBinding _pendingPasteLastTranscriptHotkey = HotkeyBinding.PasteLastTranscriptDefault;
     private HotkeyBinding _pendingOpenHistoryHotkey = HotkeyBinding.OpenHistoryDefault;
@@ -91,6 +92,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         IClipboardPasteService clipboardPasteService,
         IDictationController dictationController,
         ILaunchAtStartupService launchAtStartupService,
+        LlmModelCatalogClient llmModelCatalogClient,
         IUiDispatcherQueueAccessor uiDispatcherQueueAccessor)
     {
         _settingsStore = settingsStore;
@@ -99,7 +101,11 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         _clipboardPasteService = clipboardPasteService;
         _dictationController = dictationController;
         _launchAtStartupService = launchAtStartupService;
+        _llmModelCatalogClient = llmModelCatalogClient;
         _uiDispatcherQueueAccessor = uiDispatcherQueueAccessor;
+
+        AvailableCerebrasModels = new ObservableCollection<string>(LlmPostProcessingCatalog.CerebrasModels);
+        AvailableLlmGroqModels = new ObservableCollection<string>(LlmPostProcessingCatalog.GroqModels);
 
         _transcriptHistoryStore.HistoryChanged += OnHistoryChanged;
         _dictationController.StatusChanged += OnDictationStatusChanged;
@@ -111,9 +117,9 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
     public ObservableCollection<TranscriptHistoryItemViewModel> TranscriptHistoryEntries { get; } = [];
 
-    public IReadOnlyList<string> AvailableCerebrasModels => CerebrasModels;
+    public ObservableCollection<string> AvailableCerebrasModels { get; }
 
-    public IReadOnlyList<string> AvailableLlmGroqModels => LlmGroqModels;
+    public ObservableCollection<string> AvailableLlmGroqModels { get; }
 
     public IReadOnlyList<string> AvailableGroqModels => GroqModels;
 
@@ -562,6 +568,22 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         StatusMessage = "Transcript history cleared.";
     }
 
+    public async Task FetchCerebrasModelsAsync(CancellationToken cancellationToken = default)
+    {
+        var models = await _llmModelCatalogClient.FetchCerebrasModelsAsync(CerebrasApiKey, cancellationToken);
+        ReplaceModels(AvailableCerebrasModels, models);
+        _fetchedCerebrasModels = [.. models];
+        SelectedCerebrasModel = SelectPreferredModel(AvailableCerebrasModels, SelectedCerebrasModel, LlmPostProcessingCatalog.DefaultCerebrasModel);
+    }
+
+    public async Task FetchLlmGroqModelsAsync(CancellationToken cancellationToken = default)
+    {
+        var models = await _llmModelCatalogClient.FetchGroqModelsAsync(LlmGroqApiKey, cancellationToken);
+        ReplaceModels(AvailableLlmGroqModels, models);
+        _fetchedLlmGroqModels = [.. models];
+        SelectedLlmGroqModel = SelectPreferredModel(AvailableLlmGroqModels, SelectedLlmGroqModel, LlmPostProcessingCatalog.DefaultGroqModel);
+    }
+
     public void ResetLlmPostProcessingPrompt()
     {
         LlmPostProcessingPrompt = LlmPostProcessingCatalog.DefaultPrompt;
@@ -620,8 +642,14 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         LlmPostProcessingPrompt = string.IsNullOrWhiteSpace(settings.LlmPostProcessingPrompt)
             ? LlmPostProcessingCatalog.DefaultPrompt
             : settings.LlmPostProcessingPrompt;
-        SelectedCerebrasModel = CerebrasModels.FirstOrDefault(model => model == settings.CerebrasModel) ?? CerebrasModels[0];
-        SelectedLlmGroqModel = LlmGroqModels.FirstOrDefault(model => model == settings.LlmGroqModel) ?? LlmGroqModels[0];
+        ReplaceModels(AvailableCerebrasModels, settings.FetchedCerebrasModels?.Count > 0 ? settings.FetchedCerebrasModels : LlmPostProcessingCatalog.CerebrasModels);
+        ReplaceModels(AvailableLlmGroqModels, settings.FetchedLlmGroqModels?.Count > 0 ? settings.FetchedLlmGroqModels : LlmPostProcessingCatalog.GroqModels);
+        _fetchedCerebrasModels = settings.FetchedCerebrasModels?.Count > 0 ? [.. settings.FetchedCerebrasModels] : null;
+        _fetchedLlmGroqModels = settings.FetchedLlmGroqModels?.Count > 0 ? [.. settings.FetchedLlmGroqModels] : null;
+        EnsureModelAvailable(AvailableCerebrasModels, settings.CerebrasModel, LlmPostProcessingCatalog.DefaultCerebrasModel);
+        EnsureModelAvailable(AvailableLlmGroqModels, settings.LlmGroqModel, LlmPostProcessingCatalog.DefaultGroqModel);
+        SelectedCerebrasModel = SelectPreferredModel(AvailableCerebrasModels, settings.CerebrasModel, LlmPostProcessingCatalog.DefaultCerebrasModel);
+        SelectedLlmGroqModel = SelectPreferredModel(AvailableLlmGroqModels, settings.LlmGroqModel, LlmPostProcessingCatalog.DefaultGroqModel);
         SelectedGroqModel = GroqModels.FirstOrDefault(model => model == settings.GroqModel) ?? GroqModels[0];
         GroqLanguage = NormalizeLanguage(settings.GroqLanguage);
         SelectedFireworksModel = FireworksModels.FirstOrDefault(model => model == settings.FireworksModel) ?? FireworksModels[0];
@@ -663,8 +691,10 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             LlmPostProcessingPrompt = string.IsNullOrWhiteSpace(LlmPostProcessingPrompt)
                 ? LlmPostProcessingCatalog.DefaultPrompt
                 : LlmPostProcessingPrompt.Trim(),
-            CerebrasModel = string.IsNullOrWhiteSpace(SelectedCerebrasModel) ? CerebrasModels[0] : SelectedCerebrasModel,
-            LlmGroqModel = string.IsNullOrWhiteSpace(SelectedLlmGroqModel) ? LlmGroqModels[0] : SelectedLlmGroqModel,
+            FetchedCerebrasModels = _fetchedCerebrasModels,
+            FetchedLlmGroqModels = _fetchedLlmGroqModels,
+            CerebrasModel = string.IsNullOrWhiteSpace(SelectedCerebrasModel) ? AvailableCerebrasModels[0] : SelectedCerebrasModel,
+            LlmGroqModel = string.IsNullOrWhiteSpace(SelectedLlmGroqModel) ? AvailableLlmGroqModels[0] : SelectedLlmGroqModel,
             GroqModel = string.IsNullOrWhiteSpace(SelectedGroqModel) ? GroqModels[0] : SelectedGroqModel,
             GroqLanguage = NormalizeLanguage(GroqLanguage),
             FireworksModel = string.IsNullOrWhiteSpace(SelectedFireworksModel) ? FireworksModels[0] : SelectedFireworksModel,
@@ -786,6 +816,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
                left.LaunchAtStartup == right.LaunchAtStartup &&
                left.SoundFeedbackEnabled == right.SoundFeedbackEnabled &&
                string.Equals(left.LlmPostProcessingPrompt, right.LlmPostProcessingPrompt, StringComparison.Ordinal) &&
+               ModelListsAreEquivalent(left.FetchedCerebrasModels, right.FetchedCerebrasModels) &&
+               ModelListsAreEquivalent(left.FetchedLlmGroqModels, right.FetchedLlmGroqModels) &&
                string.Equals(left.CerebrasModel, right.CerebrasModel, StringComparison.Ordinal) &&
                string.Equals(left.LlmGroqModel, right.LlmGroqModel, StringComparison.Ordinal) &&
                string.Equals(left.GroqModel, right.GroqModel, StringComparison.Ordinal) &&
@@ -805,5 +837,48 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private static string GetDefaultDeepgramModel(bool streamingEnabled)
     {
         return streamingEnabled ? DeepgramStreamingModels[0] : DeepgramBatchModels[0];
+    }
+
+    private static void ReplaceModels(ObservableCollection<string> target, IReadOnlyList<string> source)
+    {
+        target.Clear();
+        foreach (var model in source)
+        {
+            target.Add(model);
+        }
+    }
+
+    private static void EnsureModelAvailable(ObservableCollection<string> models, string? selectedModel, string fallbackModel)
+    {
+        var normalizedSelectedModel = string.IsNullOrWhiteSpace(selectedModel) ? fallbackModel : selectedModel.Trim();
+        if (models.Any(model => string.Equals(model, normalizedSelectedModel, StringComparison.Ordinal)))
+        {
+            return;
+        }
+
+        models.Add(normalizedSelectedModel);
+    }
+
+    private static string SelectPreferredModel(ObservableCollection<string> models, string? selectedModel, string fallbackModel)
+    {
+        var normalizedSelectedModel = string.IsNullOrWhiteSpace(selectedModel) ? fallbackModel : selectedModel.Trim();
+        return models.FirstOrDefault(model => string.Equals(model, normalizedSelectedModel, StringComparison.Ordinal))
+            ?? models.FirstOrDefault()
+            ?? fallbackModel;
+    }
+
+    private static bool ModelListsAreEquivalent(IReadOnlyList<string>? left, IReadOnlyList<string>? right)
+    {
+        if (left is null || left.Count == 0)
+        {
+            return right is null || right.Count == 0;
+        }
+
+        if (right is null || left.Count != right.Count)
+        {
+            return false;
+        }
+
+        return left.SequenceEqual(right, StringComparer.Ordinal);
     }
 }

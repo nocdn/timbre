@@ -29,7 +29,6 @@ public sealed partial class MainWindow : Window
     private readonly NativeMethods.WndProc _windowProc;
 
     private IntPtr _previousWindowProc;
-    private TrayIconService? _trayIconService;
     private KeyboardHookService? _keyboardHookService;
     private TranscriptionHistoryWindow? _historyWindow;
     private CancellationTokenSource? _autoSaveCancellationTokenSource;
@@ -55,12 +54,6 @@ public sealed partial class MainWindow : Window
     }
 
     public event Action<AppSettings>? SettingsSaved;
-
-    public void AttachTrayIcon(TrayIconService trayIconService)
-    {
-        _trayIconService = trayIconService;
-        _trayIconService.Initialize(_windowHandle);
-    }
 
     public void AttachKeyboardHookService(KeyboardHookService keyboardHookService)
     {
@@ -287,6 +280,22 @@ public sealed partial class MainWindow : Window
         await SaveSettingsAsync(immediate: true);
     }
 
+    private async void FetchCerebrasModelsButton_Click(object sender, RoutedEventArgs e)
+    {
+        await FetchLlmModelsAsync(
+            FetchCerebrasModelsButton,
+            () => _viewModel.FetchCerebrasModelsAsync(),
+            "Cerebras models could not be fetched");
+    }
+
+    private async void FetchLlmGroqModelsButton_Click(object sender, RoutedEventArgs e)
+    {
+        await FetchLlmModelsAsync(
+            FetchLlmGroqModelsButton,
+            () => _viewModel.FetchLlmGroqModelsAsync(),
+            "Groq models could not be fetched");
+    }
+
     private void DeepgramStreamingToggle_Toggled(object sender, RoutedEventArgs e)
     {
         if (_isApplyingViewModel)
@@ -410,6 +419,33 @@ public sealed partial class MainWindow : Window
     private void HideTranscriptHistorySavedIndicator()
     {
         TranscriptHistoryLimitSavedTextBlock.Visibility = Visibility.Collapsed;
+    }
+
+    private async Task FetchLlmModelsAsync(Button button, Func<Task> fetchAction, string dialogTitle)
+    {
+        var originalContent = button.Content;
+
+        try
+        {
+            ApplyControlsToViewModel();
+            button.IsEnabled = false;
+            button.Content = "Fetching...";
+
+            await fetchAction();
+            ApplyViewModelToControls();
+            await SaveSettingsAsync(immediate: true);
+        }
+        catch (Exception exception)
+        {
+            DiagnosticsLogger.Error(dialogTitle + ".", exception);
+            ApplyViewModelToControls();
+            await ShowDialogAsync(dialogTitle, exception.Message);
+        }
+        finally
+        {
+            button.Content = originalContent;
+            button.IsEnabled = true;
+        }
     }
 
     private static bool IsHotkeyAllowedForCapture(HotkeyBinding hotkey)
@@ -650,11 +686,6 @@ public sealed partial class MainWindow : Window
 
     private IntPtr HandleWindowMessage(IntPtr hWnd, uint message, IntPtr wParam, IntPtr lParam)
     {
-        if (_trayIconService is not null && _trayIconService.HandleWindowMessage(message, wParam, lParam))
-        {
-            return IntPtr.Zero;
-        }
-
         if (!_allowClose)
         {
             if (message == NativeMethods.WM_CLOSE)

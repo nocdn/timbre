@@ -104,6 +104,14 @@ public static class Program
             };
             return new LlmTranscriptPostProcessor(httpClient);
         });
+        services.AddSingleton<LlmModelCatalogClient>(_ =>
+        {
+            var httpClient = new HttpClient
+            {
+                Timeout = TimeSpan.FromMinutes(2),
+            };
+            return new LlmModelCatalogClient(httpClient);
+        });
         services.AddSingleton<DeepgramStreamingTranscriptionClient>();
         services.AddSingleton<MistralRealtimeTranscriptionClient>();
         services.AddSingleton<ITranscriptionClientFactory, TranscriptionClientFactory>();

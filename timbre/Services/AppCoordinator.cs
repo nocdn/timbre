@@ -53,7 +53,7 @@ public sealed class AppCoordinator
         _mainWindow.SettingsSaved += OnSettingsSaved;
 
         _trayIconService = new TrayIconService(() => _mainWindow.ShowSettingsWindowAsync(), QuitApplication);
-        _mainWindow.AttachTrayIcon(_trayIconService);
+        _trayIconService.Initialize();
         _notificationService.AttachTrayIconService(_trayIconService);
 
         _keyboardHookService = new KeyboardHookService(_mainWindow.DispatcherQueue);
