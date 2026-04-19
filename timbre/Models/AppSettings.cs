@@ -6,7 +6,15 @@ public sealed class AppSettings
 
     public TranscriptionProvider Provider { get; init; } = TranscriptionProvider.Groq;
 
+    public bool LlmPostProcessingEnabled { get; init; }
+
+    public LlmPostProcessingProvider LlmPostProcessingProvider { get; init; } = LlmPostProcessingCatalog.DefaultProvider;
+
     public string? GroqApiKey { get; init; }
+
+    public string? CerebrasApiKey { get; init; }
+
+    public string? LlmGroqApiKey { get; init; }
 
     public string? FireworksApiKey { get; init; }
 
@@ -29,6 +37,12 @@ public sealed class AppSettings
     public bool LaunchAtStartup { get; init; }
 
     public bool SoundFeedbackEnabled { get; init; } = true;
+
+    public string LlmPostProcessingPrompt { get; init; } = LlmPostProcessingCatalog.DefaultPrompt;
+
+    public string CerebrasModel { get; init; } = LlmPostProcessingCatalog.DefaultCerebrasModel;
+
+    public string LlmGroqModel { get; init; } = LlmPostProcessingCatalog.DefaultGroqModel;
 
     public string GroqModel { get; init; } = "whisper-large-v3-turbo";
 

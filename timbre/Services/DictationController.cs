@@ -22,6 +22,7 @@ public sealed class DictationController : IDictationController
     private readonly ITextInsertionService _textInsertionService;
     private readonly ITranscriptHistoryStore _transcriptHistoryStore;
     private readonly INotificationService _notificationService;
+    private readonly LlmTranscriptPostProcessor _llmTranscriptPostProcessor;
     private readonly DeepgramStreamingTranscriptionClient _deepgramStreamingClient;
     private readonly MistralRealtimeTranscriptionClient _mistralRealtimeClient;
     private readonly SemaphoreSlim _stateLock = new(1, 1);
@@ -42,6 +43,7 @@ public sealed class DictationController : IDictationController
         ITextInsertionService textInsertionService,
         ITranscriptHistoryStore transcriptHistoryStore,
         INotificationService notificationService,
+        LlmTranscriptPostProcessor llmTranscriptPostProcessor,
         DeepgramStreamingTranscriptionClient deepgramStreamingClient,
         MistralRealtimeTranscriptionClient mistralRealtimeClient)
     {
@@ -51,6 +53,7 @@ public sealed class DictationController : IDictationController
         _textInsertionService = textInsertionService;
         _transcriptHistoryStore = transcriptHistoryStore;
         _notificationService = notificationService;
+        _llmTranscriptPostProcessor = llmTranscriptPostProcessor;
         _deepgramStreamingClient = deepgramStreamingClient;
         _mistralRealtimeClient = mistralRealtimeClient;
     }
@@ -81,6 +84,14 @@ public sealed class DictationController : IDictationController
             {
                 PublishStatus(DictationState.Error, GetMissingApiKeyMessage(settings.Provider), false);
                 _notificationService.ShowNotification("API key missing", GetMissingApiKeyMessage(settings.Provider), true);
+                return false;
+            }
+
+            if (settings.LlmPostProcessingEnabled && !HasLlmPostProcessingApiKey(settings))
+            {
+                var missingLlmApiKeyMessage = GetMissingLlmPostProcessingApiKeyMessage(settings.LlmPostProcessingProvider);
+                PublishStatus(DictationState.Error, missingLlmApiKeyMessage, false);
+                _notificationService.ShowNotification("LLM API key missing", missingLlmApiKeyMessage, true);
                 return false;
             }
 
@@ -251,6 +262,17 @@ public sealed class DictationController : IDictationController
                     : await TranscribeWithRetryAsync(audioBytes, settings, _transcriptionCancellationTokenSource.Token);
 
                 DiagnosticsLogger.Info($"Transcription completed. Provider={settings.Provider}, TranscriptLength={transcription.Length}.");
+
+                if (settings.LlmPostProcessingEnabled)
+                {
+                    PublishStatus(
+                        DictationState.Transcribing,
+                        $"Cleaning transcript with {GetLlmPostProcessingProviderDisplayName(settings.LlmPostProcessingProvider)}...",
+                        true);
+                    transcription = await _llmTranscriptPostProcessor.CleanTranscriptAsync(transcription, settings, _transcriptionCancellationTokenSource.Token);
+                    DiagnosticsLogger.Info(
+                        $"LLM transcript post-processing completed. Provider={settings.LlmPostProcessingProvider}, TranscriptLength={transcription.Length}.");
+                }
             }
             catch (OperationCanceledException)
             {
@@ -491,6 +513,11 @@ public sealed class DictationController : IDictationController
             return;
         }
 
+        if (_settingsStore.CurrentSettings.LlmPostProcessingEnabled)
+        {
+            return;
+        }
+
         DiagnosticsLogger.Info($"Inserting realtime transcript chunk. TextLength={text.Length}, Preview='{CreateTranscriptPreview(text)}'.");
         await _streamingPasteLock.WaitAsync(cancellationToken);
 
@@ -582,6 +609,11 @@ public sealed class DictationController : IDictationController
         return !string.IsNullOrWhiteSpace(GetApiKey(settings));
     }
 
+    private static bool HasLlmPostProcessingApiKey(AppSettings settings)
+    {
+        return !string.IsNullOrWhiteSpace(GetLlmPostProcessingApiKey(settings));
+    }
+
     private static bool UsesRealtimeStreaming(AppSettings settings)
     {
         return UsesDeepgramStreaming(settings) || UsesMistralRealtime(settings);
@@ -589,7 +621,7 @@ public sealed class DictationController : IDictationController
 
     private static bool UsesLiveChunkPasting(AppSettings settings)
     {
-        return UsesDeepgramStreaming(settings) || UsesMistralRealtime(settings);
+        return !settings.LlmPostProcessingEnabled && (UsesDeepgramStreaming(settings) || UsesMistralRealtime(settings));
     }
 
     private static bool UsesDeepgramStreaming(AppSettings settings)
@@ -612,6 +644,13 @@ public sealed class DictationController : IDictationController
             TranscriptionProvider.Cohere => settings.CohereApiKey ?? string.Empty,
             _ => settings.GroqApiKey ?? string.Empty,
         };
+    }
+
+    private static string GetLlmPostProcessingApiKey(AppSettings settings)
+    {
+        return settings.LlmPostProcessingProvider == LlmPostProcessingProvider.Groq
+            ? settings.LlmGroqApiKey ?? string.Empty
+            : settings.CerebrasApiKey ?? string.Empty;
     }
 
     private static string GetModel(AppSettings settings)
@@ -657,6 +696,13 @@ public sealed class DictationController : IDictationController
         };
     }
 
+    private static string GetMissingLlmPostProcessingApiKeyMessage(LlmPostProcessingProvider provider)
+    {
+        return provider == LlmPostProcessingProvider.Groq
+            ? "Open Settings and save a Groq API key for LLM post-processing before dictating."
+            : "Open Settings and save a Cerebras API key for LLM post-processing before dictating.";
+    }
+
     private static bool TryGetUploadLimitBytes(AppSettings settings, out long uploadLimitBytes)
     {
         switch (settings.Provider)
@@ -686,6 +732,11 @@ public sealed class DictationController : IDictationController
             TranscriptionProvider.Cohere => "Cohere",
             _ => "Groq",
         };
+    }
+
+    private static string GetLlmPostProcessingProviderDisplayName(LlmPostProcessingProvider provider)
+    {
+        return provider == LlmPostProcessingProvider.Groq ? "Groq" : "Cerebras";
     }
 
     private static TimeSpan GetAudioDuration(byte[] audioBytes)

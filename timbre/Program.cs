@@ -96,6 +96,14 @@ public static class Program
             };
             return new CohereTranscriptionClient(httpClient);
         });
+        services.AddSingleton<LlmTranscriptPostProcessor>(_ =>
+        {
+            var httpClient = new HttpClient
+            {
+                Timeout = TimeSpan.FromMinutes(2),
+            };
+            return new LlmTranscriptPostProcessor(httpClient);
+        });
         services.AddSingleton<DeepgramStreamingTranscriptionClient>();
         services.AddSingleton<MistralRealtimeTranscriptionClient>();
         services.AddSingleton<ITranscriptionClientFactory, TranscriptionClientFactory>();

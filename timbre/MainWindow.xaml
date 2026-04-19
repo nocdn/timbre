@@ -320,6 +320,116 @@
 
                 <StackPanel Spacing="12">
                     <TextBlock
+                        Text="LLM post-processing"
+                        Style="{ThemeResource SubtitleTextBlockStyle}" />
+                    <StackPanel Spacing="14">
+                        <StackPanel Spacing="6">
+                            <ToggleSwitch
+                                x:Name="LlmPostProcessingToggle"
+                                Header="Clean transcripts with an LLM"
+                                Toggled="LlmPostProcessingToggle_Toggled" />
+                            <TextBlock
+                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                Text="When on, Timbre sends the finished transcript to the selected LLM provider to remove filler words, false starts, and earlier wording that the speaker corrected."
+                                TextWrapping="WrapWholeWords" />
+                        </StackPanel>
+
+                        <StackPanel
+                            x:Name="LlmPostProcessingSettingsPanel"
+                            Spacing="14">
+                            <StackPanel Spacing="8">
+                                <TextBlock Text="Post-processing prompt" />
+                                <TextBox
+                                    x:Name="LlmPostProcessingPromptTextBox"
+                                    MinHeight="160"
+                                    AcceptsReturn="True"
+                                    TextChanged="SettingsTextBox_TextChanged"
+                                    TextWrapping="Wrap" />
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <Button
+                                        x:Name="ResetLlmPostProcessingPromptButton"
+                                        Click="ResetLlmPostProcessingPromptButton_Click"
+                                        Content="Reset to default" />
+                                </StackPanel>
+                                <TextBlock
+                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                    Text="This prompt is shared by both providers. Timbre still enforces a JSON response format internally so the cleaned transcript can be parsed reliably."
+                                    TextWrapping="WrapWholeWords" />
+                            </StackPanel>
+
+                            <StackPanel Spacing="6">
+                                <TextBlock
+                                    Text="Provider"
+                                    Style="{ThemeResource SubtitleTextBlockStyle}" />
+                                <StackPanel Orientation="Horizontal" Spacing="16">
+                                    <RadioButton
+                                        x:Name="CerebrasLlmProviderRadioButton"
+                                        Checked="LlmProviderRadioButton_Checked"
+                                        Content="Cerebras"
+                                        GroupName="LlmProviderGroup" />
+                                    <RadioButton
+                                        x:Name="GroqLlmProviderRadioButton"
+                                        Checked="LlmProviderRadioButton_Checked"
+                                        Content="Groq"
+                                        GroupName="LlmProviderGroup" />
+                                </StackPanel>
+                            </StackPanel>
+                        </StackPanel>
+                    </StackPanel>
+                </StackPanel>
+
+                <StackPanel
+                    x:Name="CerebrasLlmSettingsPanel"
+                    Spacing="14">
+                    <TextBlock
+                        Text="Cerebras LLM settings"
+                        Style="{ThemeResource SubtitleTextBlockStyle}" />
+                    <StackPanel Spacing="14">
+                        <PasswordBox
+                            x:Name="CerebrasApiKeyBox"
+                            PasswordChanged="SettingsPasswordBox_PasswordChanged"
+                            Header="Cerebras API key" />
+
+                        <ComboBox
+                            x:Name="CerebrasModelComboBox"
+                            SelectionChanged="SettingsComboBox_SelectionChanged"
+                            Header="Cerebras model"
+                            PlaceholderText="Select a Cerebras model" />
+
+                        <TextBlock
+                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                            Text="Uses Cerebras chat completions. Current official models are gpt-oss-120b, llama3.1-8b, qwen-3-235b-a22b-instruct-2507, and zai-glm-4.7. Docs: https://inference-docs.cerebras.ai/api-reference/chat-completions"
+                            TextWrapping="WrapWholeWords" />
+                    </StackPanel>
+                </StackPanel>
+
+                <StackPanel
+                    x:Name="GroqLlmSettingsPanel"
+                    Spacing="14">
+                    <TextBlock
+                        Text="Groq LLM settings"
+                        Style="{ThemeResource SubtitleTextBlockStyle}" />
+                    <StackPanel Spacing="14">
+                        <PasswordBox
+                            x:Name="LlmGroqApiKeyBox"
+                            PasswordChanged="SettingsPasswordBox_PasswordChanged"
+                            Header="Groq API key" />
+
+                        <ComboBox
+                            x:Name="LlmGroqModelComboBox"
+                            SelectionChanged="SettingsComboBox_SelectionChanged"
+                            Header="Groq model"
+                            PlaceholderText="Select a Groq model" />
+
+                        <TextBlock
+                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                            Text="Uses Groq chat completions. This dropdown includes the current official text models that fit transcript cleanup, including GPT OSS, Llama, and Qwen options. Docs: https://console.groq.com/docs/models and https://console.groq.com/docs/api-reference"
+                            TextWrapping="WrapWholeWords" />
+                    </StackPanel>
+                </StackPanel>
+
+                <StackPanel Spacing="12">
+                    <TextBlock
                         Text="Launch at startup"
                         Style="{ThemeResource SubtitleTextBlockStyle}" />
                     <StackPanel Spacing="6">

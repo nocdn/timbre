@@ -43,8 +43,18 @@ if (-not $dotnetCommand) {
 }
 
 $repoRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
+$appProject = Join-Path $repoRoot 'timbre\timbre.csproj'
 $installerProject = Join-Path $repoRoot 'installer\timbre.installer.wixproj'
+$runtime = 'win-x64'
 
+Write-Host "Publishing app ($Configuration, $runtime)..."
+& $dotnetCommand publish $appProject -c $Configuration -r $runtime --self-contained false
+
+if ($LASTEXITCODE -ne 0) {
+    exit $LASTEXITCODE
+}
+
+Write-Host "Building MSI with PackageVersion=$Version..."
 & $dotnetCommand build $installerProject -c $Configuration "-p:PackageVersion=$Version"
 
 if ($LASTEXITCODE -ne 0) {

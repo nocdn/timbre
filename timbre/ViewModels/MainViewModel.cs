@@ -9,6 +9,8 @@ namespace timbre.ViewModels;
 
 public sealed class MainViewModel : ObservableObject, IDisposable
 {
+    private static readonly IReadOnlyList<string> CerebrasModels = LlmPostProcessingCatalog.CerebrasModels;
+    private static readonly IReadOnlyList<string> LlmGroqModels = LlmPostProcessingCatalog.GroqModels;
     private static readonly string[] GroqModels =
     [
         "whisper-large-v3-turbo",
@@ -42,7 +44,11 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
     private AudioInputDevice? _selectedInputDevice;
     private TranscriptionProvider _selectedProvider = TranscriptionProvider.Groq;
+    private bool _llmPostProcessingEnabled;
+    private LlmPostProcessingProvider _selectedLlmPostProcessingProvider = LlmPostProcessingCatalog.DefaultProvider;
     private string _groqApiKey = string.Empty;
+    private string _cerebrasApiKey = string.Empty;
+    private string _llmGroqApiKey = string.Empty;
     private string _fireworksApiKey = string.Empty;
     private string _deepgramApiKey = string.Empty;
     private string _mistralApiKey = string.Empty;
@@ -54,6 +60,9 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private bool _soundFeedbackEnabled = true;
     private int _transcriptHistoryLimit = 200;
     private double _transcriptHistoryLimitValue = 200;
+    private string _llmPostProcessingPrompt = LlmPostProcessingCatalog.DefaultPrompt;
+    private string _selectedCerebrasModel = LlmPostProcessingCatalog.DefaultCerebrasModel;
+    private string _selectedLlmGroqModel = LlmPostProcessingCatalog.DefaultGroqModel;
     private string _selectedGroqModel = GroqModels[0];
     private string _selectedFireworksModel = FireworksModels[0];
     private string _groqLanguage = "en";
@@ -102,6 +111,10 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
     public ObservableCollection<TranscriptHistoryItemViewModel> TranscriptHistoryEntries { get; } = [];
 
+    public IReadOnlyList<string> AvailableCerebrasModels => CerebrasModels;
+
+    public IReadOnlyList<string> AvailableLlmGroqModels => LlmGroqModels;
+
     public IReadOnlyList<string> AvailableGroqModels => GroqModels;
 
     public IReadOnlyList<string> AvailableFireworksModels => FireworksModels;
@@ -109,6 +122,45 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     public IReadOnlyList<string> AvailableDeepgramModels => DeepgramStreamingEnabled ? DeepgramStreamingModels : DeepgramBatchModels;
 
     public IReadOnlyList<string> AvailableCohereModels => CohereModels;
+
+    public bool LlmPostProcessingEnabled
+    {
+        get => _llmPostProcessingEnabled;
+        set
+        {
+            if (SetProperty(ref _llmPostProcessingEnabled, value))
+            {
+                OnPropertyChanged(nameof(LlmPostProcessingSettingsVisibility));
+                OnPropertyChanged(nameof(CerebrasLlmSettingsVisibility));
+                OnPropertyChanged(nameof(GroqLlmSettingsVisibility));
+            }
+        }
+    }
+
+    public LlmPostProcessingProvider SelectedLlmPostProcessingProvider
+    {
+        get => _selectedLlmPostProcessingProvider;
+        set
+        {
+            if (SetProperty(ref _selectedLlmPostProcessingProvider, value))
+            {
+                OnPropertyChanged(nameof(IsCerebrasLlmSelected));
+                OnPropertyChanged(nameof(IsGroqLlmSelected));
+                OnPropertyChanged(nameof(CerebrasLlmSettingsVisibility));
+                OnPropertyChanged(nameof(GroqLlmSettingsVisibility));
+            }
+        }
+    }
+
+    public bool IsCerebrasLlmSelected => SelectedLlmPostProcessingProvider == LlmPostProcessingProvider.Cerebras;
+
+    public bool IsGroqLlmSelected => SelectedLlmPostProcessingProvider == LlmPostProcessingProvider.Groq;
+
+    public Visibility LlmPostProcessingSettingsVisibility => LlmPostProcessingEnabled ? Visibility.Visible : Visibility.Collapsed;
+
+    public Visibility CerebrasLlmSettingsVisibility => LlmPostProcessingEnabled && IsCerebrasLlmSelected ? Visibility.Visible : Visibility.Collapsed;
+
+    public Visibility GroqLlmSettingsVisibility => LlmPostProcessingEnabled && IsGroqLlmSelected ? Visibility.Visible : Visibility.Collapsed;
 
     public TranscriptionProvider SelectedProvider
     {
@@ -161,6 +213,18 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     {
         get => _groqApiKey;
         set => SetProperty(ref _groqApiKey, value);
+    }
+
+    public string CerebrasApiKey
+    {
+        get => _cerebrasApiKey;
+        set => SetProperty(ref _cerebrasApiKey, value);
+    }
+
+    public string LlmGroqApiKey
+    {
+        get => _llmGroqApiKey;
+        set => SetProperty(ref _llmGroqApiKey, value);
     }
 
     public string FireworksApiKey
@@ -251,6 +315,24 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     {
         get => _selectedGroqModel;
         set => SetProperty(ref _selectedGroqModel, value);
+    }
+
+    public string LlmPostProcessingPrompt
+    {
+        get => _llmPostProcessingPrompt;
+        set => SetProperty(ref _llmPostProcessingPrompt, value);
+    }
+
+    public string SelectedCerebrasModel
+    {
+        get => _selectedCerebrasModel;
+        set => SetProperty(ref _selectedCerebrasModel, value);
+    }
+
+    public string SelectedLlmGroqModel
+    {
+        get => _selectedLlmGroqModel;
+        set => SetProperty(ref _selectedLlmGroqModel, value);
     }
 
     public string GroqLanguage
@@ -480,6 +562,11 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         StatusMessage = "Transcript history cleared.";
     }
 
+    public void ResetLlmPostProcessingPrompt()
+    {
+        LlmPostProcessingPrompt = LlmPostProcessingCatalog.DefaultPrompt;
+    }
+
     public void ApplyRecordingHotkey(HotkeyBinding hotkey)
     {
         _pendingHotkey = hotkey;
@@ -513,7 +600,11 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private void ApplySettings(AppSettings settings)
     {
         SelectedProvider = settings.Provider;
+        LlmPostProcessingEnabled = settings.LlmPostProcessingEnabled;
+        SelectedLlmPostProcessingProvider = settings.LlmPostProcessingProvider;
         GroqApiKey = settings.GroqApiKey ?? string.Empty;
+        CerebrasApiKey = settings.CerebrasApiKey ?? string.Empty;
+        LlmGroqApiKey = settings.LlmGroqApiKey ?? string.Empty;
         FireworksApiKey = settings.FireworksApiKey ?? string.Empty;
         DeepgramApiKey = settings.DeepgramApiKey ?? string.Empty;
         MistralApiKey = settings.MistralApiKey ?? string.Empty;
@@ -526,6 +617,11 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         SoundFeedbackEnabled = settings.SoundFeedbackEnabled;
         TranscriptHistoryLimit = settings.TranscriptHistoryLimit;
         TranscriptHistoryLimitValue = settings.TranscriptHistoryLimit;
+        LlmPostProcessingPrompt = string.IsNullOrWhiteSpace(settings.LlmPostProcessingPrompt)
+            ? LlmPostProcessingCatalog.DefaultPrompt
+            : settings.LlmPostProcessingPrompt;
+        SelectedCerebrasModel = CerebrasModels.FirstOrDefault(model => model == settings.CerebrasModel) ?? CerebrasModels[0];
+        SelectedLlmGroqModel = LlmGroqModels.FirstOrDefault(model => model == settings.LlmGroqModel) ?? LlmGroqModels[0];
         SelectedGroqModel = GroqModels.FirstOrDefault(model => model == settings.GroqModel) ?? GroqModels[0];
         GroqLanguage = NormalizeLanguage(settings.GroqLanguage);
         SelectedFireworksModel = FireworksModels.FirstOrDefault(model => model == settings.FireworksModel) ?? FireworksModels[0];
@@ -548,7 +644,11 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         {
             SelectedInputDeviceId = SelectedInputDevice?.Id,
             Provider = SelectedProvider,
+            LlmPostProcessingEnabled = LlmPostProcessingEnabled,
+            LlmPostProcessingProvider = SelectedLlmPostProcessingProvider,
             GroqApiKey = GroqApiKey.Trim(),
+            CerebrasApiKey = CerebrasApiKey.Trim(),
+            LlmGroqApiKey = LlmGroqApiKey.Trim(),
             FireworksApiKey = FireworksApiKey.Trim(),
             DeepgramApiKey = DeepgramApiKey.Trim(),
             MistralApiKey = MistralApiKey.Trim(),
@@ -560,6 +660,11 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             PushToTalk = PushToTalk,
             LaunchAtStartup = LaunchAtStartup,
             SoundFeedbackEnabled = SoundFeedbackEnabled,
+            LlmPostProcessingPrompt = string.IsNullOrWhiteSpace(LlmPostProcessingPrompt)
+                ? LlmPostProcessingCatalog.DefaultPrompt
+                : LlmPostProcessingPrompt.Trim(),
+            CerebrasModel = string.IsNullOrWhiteSpace(SelectedCerebrasModel) ? CerebrasModels[0] : SelectedCerebrasModel,
+            LlmGroqModel = string.IsNullOrWhiteSpace(SelectedLlmGroqModel) ? LlmGroqModels[0] : SelectedLlmGroqModel,
             GroqModel = string.IsNullOrWhiteSpace(SelectedGroqModel) ? GroqModels[0] : SelectedGroqModel,
             GroqLanguage = NormalizeLanguage(GroqLanguage),
             FireworksModel = string.IsNullOrWhiteSpace(SelectedFireworksModel) ? FireworksModels[0] : SelectedFireworksModel,
@@ -664,7 +769,11 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     {
         return string.Equals(left.SelectedInputDeviceId, right.SelectedInputDeviceId, StringComparison.Ordinal) &&
                left.Provider == right.Provider &&
+               left.LlmPostProcessingEnabled == right.LlmPostProcessingEnabled &&
+               left.LlmPostProcessingProvider == right.LlmPostProcessingProvider &&
                string.Equals(left.GroqApiKey, right.GroqApiKey, StringComparison.Ordinal) &&
+               string.Equals(left.CerebrasApiKey, right.CerebrasApiKey, StringComparison.Ordinal) &&
+               string.Equals(left.LlmGroqApiKey, right.LlmGroqApiKey, StringComparison.Ordinal) &&
                string.Equals(left.FireworksApiKey, right.FireworksApiKey, StringComparison.Ordinal) &&
                string.Equals(left.DeepgramApiKey, right.DeepgramApiKey, StringComparison.Ordinal) &&
                string.Equals(left.MistralApiKey, right.MistralApiKey, StringComparison.Ordinal) &&
@@ -676,6 +785,9 @@ public sealed class MainViewModel : ObservableObject, IDisposable
                left.PushToTalk == right.PushToTalk &&
                left.LaunchAtStartup == right.LaunchAtStartup &&
                left.SoundFeedbackEnabled == right.SoundFeedbackEnabled &&
+               string.Equals(left.LlmPostProcessingPrompt, right.LlmPostProcessingPrompt, StringComparison.Ordinal) &&
+               string.Equals(left.CerebrasModel, right.CerebrasModel, StringComparison.Ordinal) &&
+               string.Equals(left.LlmGroqModel, right.LlmGroqModel, StringComparison.Ordinal) &&
                string.Equals(left.GroqModel, right.GroqModel, StringComparison.Ordinal) &&
                string.Equals(left.GroqLanguage, right.GroqLanguage, StringComparison.Ordinal) &&
                string.Equals(left.FireworksModel, right.FireworksModel, StringComparison.Ordinal) &&

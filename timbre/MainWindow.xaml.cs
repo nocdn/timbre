@@ -118,6 +118,9 @@ public sealed partial class MainWindow : Window
             DeepgramProviderRadioButton.IsChecked = _viewModel.IsDeepgramSelected;
             MistralProviderRadioButton.IsChecked = _viewModel.IsMistralSelected;
             CohereProviderRadioButton.IsChecked = _viewModel.IsCohereSelected;
+            LlmPostProcessingToggle.IsOn = _viewModel.LlmPostProcessingEnabled;
+            CerebrasLlmProviderRadioButton.IsChecked = _viewModel.IsCerebrasLlmSelected;
+            GroqLlmProviderRadioButton.IsChecked = _viewModel.IsGroqLlmSelected;
             HotkeyCaptureButton.Content = _viewModel.RecordingHotkeyDisplay;
             PasteLastTranscriptHotkeyCaptureButton.Content = _viewModel.PasteLastTranscriptHotkeyDisplay;
             OpenHistoryHotkeyCaptureButton.Content = _viewModel.OpenHistoryHotkeyDisplay;
@@ -125,6 +128,13 @@ public sealed partial class MainWindow : Window
             PushToTalkToggle.IsOn = _viewModel.PushToTalk;
             LaunchAtStartupToggle.IsOn = _viewModel.LaunchAtStartup;
             SoundFeedbackToggle.IsOn = _viewModel.SoundFeedbackEnabled;
+            LlmPostProcessingPromptTextBox.Text = _viewModel.LlmPostProcessingPrompt;
+            CerebrasApiKeyBox.Password = _viewModel.CerebrasApiKey;
+            CerebrasModelComboBox.ItemsSource = _viewModel.AvailableCerebrasModels;
+            CerebrasModelComboBox.SelectedItem = _viewModel.SelectedCerebrasModel;
+            LlmGroqApiKeyBox.Password = _viewModel.LlmGroqApiKey;
+            LlmGroqModelComboBox.ItemsSource = _viewModel.AvailableLlmGroqModels;
+            LlmGroqModelComboBox.SelectedItem = _viewModel.SelectedLlmGroqModel;
             GroqApiKeyBox.Password = _viewModel.GroqApiKey;
             GroqModelComboBox.ItemsSource = _viewModel.AvailableGroqModels;
             GroqModelComboBox.SelectedItem = _viewModel.SelectedGroqModel;
@@ -145,6 +155,9 @@ public sealed partial class MainWindow : Window
             CohereModelComboBox.ItemsSource = _viewModel.AvailableCohereModels;
             CohereModelComboBox.SelectedItem = _viewModel.SelectedCohereModel;
             CohereLanguageTextBox.Text = _viewModel.CohereLanguage;
+            LlmPostProcessingSettingsPanel.Visibility = _viewModel.LlmPostProcessingSettingsVisibility;
+            CerebrasLlmSettingsPanel.Visibility = _viewModel.CerebrasLlmSettingsVisibility;
+            GroqLlmSettingsPanel.Visibility = _viewModel.GroqLlmSettingsVisibility;
             GroqSettingsPanel.Visibility = _viewModel.GroqSettingsVisibility;
             FireworksSettingsPanel.Visibility = _viewModel.FireworksSettingsVisibility;
             DeepgramSettingsPanel.Visibility = _viewModel.DeepgramSettingsVisibility;
@@ -210,6 +223,13 @@ public sealed partial class MainWindow : Window
         QueueAutoSave();
     }
 
+    private void LlmProviderRadioButton_Checked(object sender, RoutedEventArgs e)
+    {
+        _viewModel.SelectedLlmPostProcessingProvider = GetSelectedLlmPostProcessingProviderFromControls();
+        ApplyViewModelToControls();
+        QueueAutoSave();
+    }
+
     private async void CancelTranscriptionButton_Click(object sender, RoutedEventArgs e)
     {
         await _viewModel.CancelTranscriptionAsync();
@@ -246,6 +266,25 @@ public sealed partial class MainWindow : Window
     private void SettingsPasswordBox_PasswordChanged(object sender, RoutedEventArgs e)
     {
         QueueAutoSave(TextInputAutoSaveDelay);
+    }
+
+    private void LlmPostProcessingToggle_Toggled(object sender, RoutedEventArgs e)
+    {
+        if (_isApplyingViewModel)
+        {
+            return;
+        }
+
+        _viewModel.LlmPostProcessingEnabled = LlmPostProcessingToggle.IsOn;
+        ApplyViewModelToControls();
+        QueueAutoSave();
+    }
+
+    private async void ResetLlmPostProcessingPromptButton_Click(object sender, RoutedEventArgs e)
+    {
+        _viewModel.ResetLlmPostProcessingPrompt();
+        ApplyViewModelToControls();
+        await SaveSettingsAsync(immediate: true);
     }
 
     private void DeepgramStreamingToggle_Toggled(object sender, RoutedEventArgs e)
@@ -467,7 +506,11 @@ public sealed partial class MainWindow : Window
     {
         _viewModel.SelectedInputDevice = InputDeviceComboBox.SelectedItem as AudioInputDevice;
         _viewModel.SelectedProvider = GetSelectedProviderFromControls();
+        _viewModel.LlmPostProcessingEnabled = LlmPostProcessingToggle.IsOn;
+        _viewModel.SelectedLlmPostProcessingProvider = GetSelectedLlmPostProcessingProviderFromControls();
         _viewModel.GroqApiKey = GroqApiKeyBox.Password;
+        _viewModel.CerebrasApiKey = CerebrasApiKeyBox.Password;
+        _viewModel.LlmGroqApiKey = LlmGroqApiKeyBox.Password;
         _viewModel.FireworksApiKey = FireworksApiKeyBox.Password;
         _viewModel.DeepgramApiKey = DeepgramApiKeyBox.Password;
         _viewModel.MistralApiKey = MistralApiKeyBox.Password;
@@ -480,6 +523,9 @@ public sealed partial class MainWindow : Window
         _viewModel.PushToTalk = PushToTalkToggle.IsOn;
         _viewModel.LaunchAtStartup = LaunchAtStartupToggle.IsOn;
         _viewModel.SoundFeedbackEnabled = SoundFeedbackToggle.IsOn;
+        _viewModel.LlmPostProcessingPrompt = LlmPostProcessingPromptTextBox.Text;
+        _viewModel.SelectedCerebrasModel = CerebrasModelComboBox.SelectedItem as string ?? _viewModel.AvailableCerebrasModels[0];
+        _viewModel.SelectedLlmGroqModel = LlmGroqModelComboBox.SelectedItem as string ?? _viewModel.AvailableLlmGroqModels[0];
         _viewModel.SelectedGroqModel = GroqModelComboBox.SelectedItem as string ?? _viewModel.AvailableGroqModels[0];
         _viewModel.GroqLanguage = GroqLanguageTextBox.Text;
         _viewModel.SelectedFireworksModel = FireworksModelComboBox.SelectedItem as string ?? _viewModel.AvailableFireworksModels[0];
@@ -487,6 +533,13 @@ public sealed partial class MainWindow : Window
         _viewModel.SelectedDeepgramModel = DeepgramModelComboBox.SelectedItem as string ?? _viewModel.AvailableDeepgramModels[0];
         _viewModel.SelectedCohereModel = CohereModelComboBox.SelectedItem as string ?? _viewModel.AvailableCohereModels[0];
         _viewModel.CohereLanguage = CohereLanguageTextBox.Text;
+    }
+
+    private LlmPostProcessingProvider GetSelectedLlmPostProcessingProviderFromControls()
+    {
+        return GroqLlmProviderRadioButton.IsChecked == true
+            ? LlmPostProcessingProvider.Groq
+            : LlmPostProcessingProvider.Cerebras;
     }
 
     private TranscriptionProvider GetSelectedProviderFromControls()
