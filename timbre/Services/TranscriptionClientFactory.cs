@@ -10,19 +10,22 @@ public sealed class TranscriptionClientFactory : ITranscriptionClientFactory
     private readonly DeepgramTranscriptionClient _deepgramClient;
     private readonly MistralTranscriptionClient _mistralClient;
     private readonly CohereTranscriptionClient _cohereClient;
+    private readonly ElevenLabsTranscriptionClient _elevenLabsClient;
 
     public TranscriptionClientFactory(
         GroqTranscriptionClient groqClient,
         FireworksTranscriptionClient fireworksClient,
         DeepgramTranscriptionClient deepgramClient,
         MistralTranscriptionClient mistralClient,
-        CohereTranscriptionClient cohereClient)
+        CohereTranscriptionClient cohereClient,
+        ElevenLabsTranscriptionClient elevenLabsClient)
     {
         _groqClient = groqClient;
         _fireworksClient = fireworksClient;
         _deepgramClient = deepgramClient;
         _mistralClient = mistralClient;
         _cohereClient = cohereClient;
+        _elevenLabsClient = elevenLabsClient;
     }
 
     public ITranscriptionClient GetClient(TranscriptionProvider provider)
@@ -33,6 +36,7 @@ public sealed class TranscriptionClientFactory : ITranscriptionClientFactory
             TranscriptionProvider.Deepgram => _deepgramClient,
             TranscriptionProvider.Mistral => _mistralClient,
             TranscriptionProvider.Cohere => _cohereClient,
+            TranscriptionProvider.ElevenLabs => _elevenLabsClient,
             _ => _groqClient,
         };
     }

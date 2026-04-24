@@ -128,7 +128,7 @@
                             <TextBlock
                                 Text="Provider"
                                 Style="{ThemeResource SubtitleTextBlockStyle}" />
-                            <StackPanel Orientation="Horizontal" Spacing="16">
+                            <StackPanel Spacing="4">
                                 <RadioButton
                                     x:Name="GroqProviderRadioButton"
                                     Checked="ProviderRadioButton_Checked"
@@ -153,6 +153,11 @@
                                     x:Name="CohereProviderRadioButton"
                                     Checked="ProviderRadioButton_Checked"
                                     Content="Cohere"
+                                    GroupName="ProviderGroup" />
+                                <RadioButton
+                                    x:Name="ElevenLabsProviderRadioButton"
+                                    Checked="ProviderRadioButton_Checked"
+                                    Content="ElevenLabs"
                                     GroupName="ProviderGroup" />
                             </StackPanel>
                         </StackPanel>
@@ -180,12 +185,14 @@
                         <StackPanel Spacing="6">
                             <TextBox
                                 x:Name="GroqLanguageTextBox"
+                                Width="160"
+                                HorizontalAlignment="Left"
                                 Header="Language"
                                 TextChanged="SettingsTextBox_TextChanged"
-                                PlaceholderText="en" />
+                                PlaceholderText="auto" />
                             <TextBlock
                                 Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                Text="Use an ISO-639-1 code like 'en'. Use 'auto' to let Groq detect it. Official docs: https://console.groq.com/docs/speech-to-text"
+                                Text="Use ISO-639-1 or ISO-639-3 code.&#x0a;Setting 'auto', the provider will detect it.&#x0a;If left blank, defaults to 'auto'"
                                 TextWrapping="WrapWholeWords" />
                         </StackPanel>
                     </StackPanel>
@@ -212,12 +219,14 @@
                         <StackPanel Spacing="6">
                             <TextBox
                                 x:Name="FireworksLanguageTextBox"
+                                Width="160"
+                                HorizontalAlignment="Left"
                                 Header="Language"
                                 TextChanged="SettingsTextBox_TextChanged"
-                                PlaceholderText="en" />
+                                PlaceholderText="auto" />
                             <TextBlock
                                 Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                Text="Use an ISO-639-1 code like 'en'. Use 'auto' to let Fireworks detect it. Docs: https://docs.fireworks.ai/api-reference/audio-transcriptions#language-code-and-name"
+                                Text="Use ISO-639-1 or ISO-639-3 code.&#x0a;Setting 'auto', the provider will detect it.&#x0a;If left blank, defaults to 'auto'"
                                 TextWrapping="WrapWholeWords" />
                         </StackPanel>
                     </StackPanel>
@@ -248,7 +257,7 @@
 
                         <TextBlock
                             Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                            Text="When streaming is on, Timbre uses Flux and pastes transcript chunks while you dictate. When streaming is off, Timbre uses Nova-3 and pastes the final transcript after recording stops. Language is fixed to English for now. Docs: https://developers.deepgram.com/reference/speech-to-text/listen-streaming and https://developers.deepgram.com/docs/pre-recorded-audio"
+                            Text="Streaming on pastes transcript chunks while you dictate. Streaming off pastes the final transcript after recording stops. Language is fixed to English for now."
                             TextWrapping="WrapWholeWords" />
                     </StackPanel>
                 </StackPanel>
@@ -266,22 +275,28 @@
                             Header="Mistral API key" />
 
                         <ToggleSwitch
-                            x:Name="MistralRealtimeToggle"
-                            Header="Realtime"
-                            Toggled="MistralRealtimeToggle_Toggled" />
+                            x:Name="MistralStreamingToggle"
+                            Header="Streaming"
+                            Toggled="MistralStreamingToggle_Toggled" />
 
                         <ComboBox
-                            x:Name="MistralRealtimeModeComboBox"
+                            x:Name="MistralModelComboBox"
                             SelectionChanged="SettingsComboBox_SelectionChanged"
-                            Header="Realtime mode"
-                            PlaceholderText="Select a realtime mode">
-                            <ComboBoxItem Content="Fast stream" />
-                            <ComboBoxItem Content="Slow stream" />
+                            Header="Mistral model"
+                            PlaceholderText="Select a Mistral model" />
+
+                        <ComboBox
+                            x:Name="MistralStreamingModeComboBox"
+                            SelectionChanged="SettingsComboBox_SelectionChanged"
+                            Header="Streaming cadence"
+                            PlaceholderText="Select a streaming cadence">
+                            <ComboBoxItem Content="Fast" />
+                            <ComboBoxItem Content="Steady" />
                         </ComboBox>
 
                         <TextBlock
                             Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                            Text="When realtime is off, Timbre uploads the finished recording to Voxtral Mini Transcribe. When realtime is on, Timbre streams 16 kHz PCM audio to Voxtral Mini Transcribe Realtime and pastes transcript chunks live while you record. Fast stream uses a 240 ms target delay. Slow stream uses a 2400 ms target delay for steadier chunks. Docs: https://docs.mistral.ai/capabilities/audio_transcription/offline_transcription and https://docs.mistral.ai/capabilities/audio_transcription/realtime_transcription"
+                            Text="Streaming on pastes transcript chunks while you dictate. Streaming off pastes the final transcript after recording stops. Language is fixed to English for now."
                             TextWrapping="WrapWholeWords" />
                     </StackPanel>
                 </StackPanel>
@@ -307,12 +322,53 @@
                         <StackPanel Spacing="6">
                             <TextBox
                                 x:Name="CohereLanguageTextBox"
+                                Width="160"
+                                HorizontalAlignment="Left"
                                 Header="Language"
                                 TextChanged="SettingsTextBox_TextChanged"
                                 PlaceholderText="en" />
                             <TextBlock
                                 Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                Text="Use an ISO-639-1 code like 'en'. Cohere requires an explicit language value. Docs: https://docs.cohere.com/reference/create-audio-transcription"
+                                Text="Use ISO-639-1 or ISO-639-3 code."
+                                TextWrapping="WrapWholeWords" />
+                        </StackPanel>
+                    </StackPanel>
+                </StackPanel>
+
+                <StackPanel
+                    x:Name="ElevenLabsSettingsPanel"
+                    Spacing="14">
+                    <TextBlock
+                        Text="ElevenLabs settings"
+                        Style="{ThemeResource SubtitleTextBlockStyle}" />
+                    <StackPanel Spacing="14">
+                        <PasswordBox
+                            x:Name="ElevenLabsApiKeyBox"
+                            PasswordChanged="SettingsPasswordBox_PasswordChanged"
+                            Header="ElevenLabs API key" />
+
+                        <ToggleSwitch
+                            x:Name="ElevenLabsStreamingToggle"
+                            Header="Streaming"
+                            Toggled="ElevenLabsStreamingToggle_Toggled" />
+
+                        <ComboBox
+                            x:Name="ElevenLabsModelComboBox"
+                            SelectionChanged="SettingsComboBox_SelectionChanged"
+                            Header="ElevenLabs model"
+                            PlaceholderText="Select an ElevenLabs model" />
+
+                        <StackPanel Spacing="6">
+                            <TextBox
+                                x:Name="ElevenLabsLanguageTextBox"
+                                Width="160"
+                                HorizontalAlignment="Left"
+                                Header="Language"
+                                TextChanged="SettingsTextBox_TextChanged"
+                                PlaceholderText="auto" />
+                            <TextBlock
+                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                Text="Use ISO-639-1 or ISO-639-3 code.&#x0a;Setting 'auto', the provider will detect it.&#x0a;If left blank, defaults to 'auto'"
                                 TextWrapping="WrapWholeWords" />
                         </StackPanel>
                     </StackPanel>

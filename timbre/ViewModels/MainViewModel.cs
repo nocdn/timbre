@@ -9,29 +9,6 @@ namespace timbre.ViewModels;
 
 public sealed class MainViewModel : ObservableObject, IDisposable
 {
-    private static readonly string[] GroqModels =
-    [
-        "whisper-large-v3-turbo",
-        "whisper-large-v3",
-    ];
-    private static readonly string[] FireworksModels =
-    [
-        "whisper-v3-turbo",
-        "whisper-v3",
-    ];
-    private static readonly string[] DeepgramStreamingModels =
-    [
-        "flux",
-    ];
-    private static readonly string[] DeepgramBatchModels =
-    [
-        "nova-3",
-    ];
-    private static readonly string[] CohereModels =
-    [
-        "cohere-transcribe-03-2026",
-    ];
-
     private readonly IAppSettingsStore _settingsStore;
     private readonly IAudioDeviceService _audioDeviceService;
     private readonly ITranscriptHistoryStore _transcriptHistoryStore;
@@ -52,8 +29,10 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private string _deepgramApiKey = string.Empty;
     private string _mistralApiKey = string.Empty;
     private string _cohereApiKey = string.Empty;
+    private string _elevenLabsApiKey = string.Empty;
     private bool _deepgramStreamingEnabled = true;
-    private bool _mistralRealtimeEnabled;
+    private bool _mistralStreamingEnabled;
+    private bool _elevenLabsStreamingEnabled;
     private bool _pushToTalk = true;
     private bool _launchAtStartup;
     private bool _soundFeedbackEnabled = true;
@@ -62,14 +41,17 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private string _llmPostProcessingPrompt = LlmPostProcessingCatalog.DefaultPrompt;
     private string _selectedCerebrasModel = LlmPostProcessingCatalog.DefaultCerebrasModel;
     private string _selectedLlmGroqModel = LlmPostProcessingCatalog.DefaultGroqModel;
-    private string _selectedGroqModel = GroqModels[0];
-    private string _selectedFireworksModel = FireworksModels[0];
-    private string _groqLanguage = "en";
-    private string _fireworksLanguage = "en";
-    private string _selectedDeepgramModel = DeepgramStreamingModels[0];
+    private string _selectedGroqModel = TranscriptionModelCatalog.DefaultGroqModel;
+    private string _selectedFireworksModel = TranscriptionModelCatalog.DefaultFireworksModel;
+    private string _groqLanguage = "auto";
+    private string _fireworksLanguage = "auto";
+    private string _selectedDeepgramModel = TranscriptionModelCatalog.DefaultDeepgramStreamingModel;
+    private string _selectedMistralModel = TranscriptionModelCatalog.DefaultMistralNonStreamingModel;
     private MistralRealtimeMode _mistralRealtimeMode = MistralRealtimeMode.Fast;
-    private string _selectedCohereModel = CohereModels[0];
+    private string _selectedCohereModel = TranscriptionModelCatalog.DefaultCohereModel;
     private string _cohereLanguage = "en";
+    private string _selectedElevenLabsModel = TranscriptionModelCatalog.DefaultElevenLabsNonStreamingModel;
+    private string _elevenLabsLanguage = "auto";
     private string _recordingHotkeyDisplay = HotkeyBinding.Default.ToDisplayString();
     private string _pasteLastTranscriptHotkeyDisplay = HotkeyBinding.PasteLastTranscriptDefault.ToDisplayString();
     private string _openHistoryHotkeyDisplay = HotkeyBinding.OpenHistoryDefault.ToDisplayString();
@@ -121,13 +103,17 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
     public ObservableCollection<string> AvailableLlmGroqModels { get; }
 
-    public IReadOnlyList<string> AvailableGroqModels => GroqModels;
+    public IReadOnlyList<string> AvailableGroqModels => TranscriptionModelCatalog.GroqModels;
 
-    public IReadOnlyList<string> AvailableFireworksModels => FireworksModels;
+    public IReadOnlyList<string> AvailableFireworksModels => TranscriptionModelCatalog.FireworksModels;
 
-    public IReadOnlyList<string> AvailableDeepgramModels => DeepgramStreamingEnabled ? DeepgramStreamingModels : DeepgramBatchModels;
+    public IReadOnlyList<string> AvailableDeepgramModels => TranscriptionModelCatalog.GetDeepgramModels(DeepgramStreamingEnabled);
 
-    public IReadOnlyList<string> AvailableCohereModels => CohereModels;
+    public IReadOnlyList<string> AvailableMistralModels => TranscriptionModelCatalog.GetMistralModels(MistralStreamingEnabled);
+
+    public IReadOnlyList<string> AvailableCohereModels => TranscriptionModelCatalog.CohereModels;
+
+    public IReadOnlyList<string> AvailableElevenLabsModels => TranscriptionModelCatalog.GetElevenLabsModels(ElevenLabsStreamingEnabled);
 
     public bool LlmPostProcessingEnabled
     {
@@ -180,11 +166,13 @@ public sealed class MainViewModel : ObservableObject, IDisposable
                 OnPropertyChanged(nameof(IsDeepgramSelected));
                 OnPropertyChanged(nameof(IsMistralSelected));
                 OnPropertyChanged(nameof(IsCohereSelected));
+                OnPropertyChanged(nameof(IsElevenLabsSelected));
                 OnPropertyChanged(nameof(GroqSettingsVisibility));
                 OnPropertyChanged(nameof(FireworksSettingsVisibility));
                 OnPropertyChanged(nameof(DeepgramSettingsVisibility));
                 OnPropertyChanged(nameof(MistralSettingsVisibility));
                 OnPropertyChanged(nameof(CohereSettingsVisibility));
+                OnPropertyChanged(nameof(ElevenLabsSettingsVisibility));
             }
         }
     }
@@ -199,6 +187,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
     public bool IsCohereSelected => SelectedProvider == TranscriptionProvider.Cohere;
 
+    public bool IsElevenLabsSelected => SelectedProvider == TranscriptionProvider.ElevenLabs;
+
     public Visibility GroqSettingsVisibility => IsGroqSelected ? Visibility.Visible : Visibility.Collapsed;
 
     public Visibility FireworksSettingsVisibility => IsFireworksSelected ? Visibility.Visible : Visibility.Collapsed;
@@ -208,6 +198,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     public Visibility MistralSettingsVisibility => IsMistralSelected ? Visibility.Visible : Visibility.Collapsed;
 
     public Visibility CohereSettingsVisibility => IsCohereSelected ? Visibility.Visible : Visibility.Collapsed;
+
+    public Visibility ElevenLabsSettingsVisibility => IsElevenLabsSelected ? Visibility.Visible : Visibility.Collapsed;
 
     public AudioInputDevice? SelectedInputDevice
     {
@@ -257,6 +249,12 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         set => SetProperty(ref _cohereApiKey, value);
     }
 
+    public string ElevenLabsApiKey
+    {
+        get => _elevenLabsApiKey;
+        set => SetProperty(ref _elevenLabsApiKey, value);
+    }
+
     public bool DeepgramStreamingEnabled
     {
         get => _deepgramStreamingEnabled;
@@ -266,19 +264,46 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             {
                 OnPropertyChanged(nameof(AvailableDeepgramModels));
 
-                var defaultModel = GetDefaultDeepgramModel(value);
-                if (!AvailableDeepgramModels.Any(model => string.Equals(model, SelectedDeepgramModel, StringComparison.Ordinal)))
-                {
-                    SelectedDeepgramModel = defaultModel;
-                }
+                SelectedDeepgramModel = SelectPreferredProviderModel(
+                    AvailableDeepgramModels,
+                    SelectedDeepgramModel,
+                    TranscriptionModelCatalog.GetDefaultDeepgramModel(value));
             }
         }
     }
 
-    public bool MistralRealtimeEnabled
+    public bool MistralStreamingEnabled
     {
-        get => _mistralRealtimeEnabled;
-        set => SetProperty(ref _mistralRealtimeEnabled, value);
+        get => _mistralStreamingEnabled;
+        set
+        {
+            if (SetProperty(ref _mistralStreamingEnabled, value))
+            {
+                OnPropertyChanged(nameof(AvailableMistralModels));
+
+                SelectedMistralModel = SelectPreferredProviderModel(
+                    AvailableMistralModels,
+                    SelectedMistralModel,
+                    TranscriptionModelCatalog.GetDefaultMistralModel(value));
+            }
+        }
+    }
+
+    public bool ElevenLabsStreamingEnabled
+    {
+        get => _elevenLabsStreamingEnabled;
+        set
+        {
+            if (SetProperty(ref _elevenLabsStreamingEnabled, value))
+            {
+                OnPropertyChanged(nameof(AvailableElevenLabsModels));
+
+                SelectedElevenLabsModel = SelectPreferredProviderModel(
+                    AvailableElevenLabsModels,
+                    SelectedElevenLabsModel,
+                    TranscriptionModelCatalog.GetDefaultElevenLabsModel(value));
+            }
+        }
     }
 
     public bool PushToTalk
@@ -365,6 +390,12 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         set => SetProperty(ref _selectedDeepgramModel, value);
     }
 
+    public string SelectedMistralModel
+    {
+        get => _selectedMistralModel;
+        set => SetProperty(ref _selectedMistralModel, value);
+    }
+
     public MistralRealtimeMode MistralRealtimeMode
     {
         get => _mistralRealtimeMode;
@@ -381,6 +412,18 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     {
         get => _cohereLanguage;
         set => SetProperty(ref _cohereLanguage, value);
+    }
+
+    public string SelectedElevenLabsModel
+    {
+        get => _selectedElevenLabsModel;
+        set => SetProperty(ref _selectedElevenLabsModel, value);
+    }
+
+    public string ElevenLabsLanguage
+    {
+        get => _elevenLabsLanguage;
+        set => SetProperty(ref _elevenLabsLanguage, value);
     }
 
     public string RecordingHotkeyDisplay
@@ -631,9 +674,11 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         DeepgramApiKey = settings.DeepgramApiKey ?? string.Empty;
         MistralApiKey = settings.MistralApiKey ?? string.Empty;
         CohereApiKey = settings.CohereApiKey ?? string.Empty;
+        ElevenLabsApiKey = settings.ElevenLabsApiKey ?? string.Empty;
         DeepgramStreamingEnabled = settings.DeepgramStreamingEnabled;
-        MistralRealtimeEnabled = settings.MistralRealtimeEnabled;
+        MistralStreamingEnabled = settings.MistralStreamingEnabled;
         MistralRealtimeMode = settings.MistralRealtimeMode;
+        ElevenLabsStreamingEnabled = settings.ElevenLabsStreamingEnabled;
         PushToTalk = settings.PushToTalk;
         LaunchAtStartup = settings.LaunchAtStartup;
         SoundFeedbackEnabled = settings.SoundFeedbackEnabled;
@@ -650,13 +695,16 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         EnsureModelAvailable(AvailableLlmGroqModels, settings.LlmGroqModel, LlmPostProcessingCatalog.DefaultGroqModel);
         SelectedCerebrasModel = SelectPreferredModel(AvailableCerebrasModels, settings.CerebrasModel, LlmPostProcessingCatalog.DefaultCerebrasModel);
         SelectedLlmGroqModel = SelectPreferredModel(AvailableLlmGroqModels, settings.LlmGroqModel, LlmPostProcessingCatalog.DefaultGroqModel);
-        SelectedGroqModel = GroqModels.FirstOrDefault(model => model == settings.GroqModel) ?? GroqModels[0];
-        GroqLanguage = NormalizeLanguage(settings.GroqLanguage);
-        SelectedFireworksModel = FireworksModels.FirstOrDefault(model => model == settings.FireworksModel) ?? FireworksModels[0];
-        FireworksLanguage = NormalizeLanguage(settings.FireworksLanguage);
-        SelectedDeepgramModel = AvailableDeepgramModels.FirstOrDefault(model => model == settings.DeepgramModel) ?? GetDefaultDeepgramModel(settings.DeepgramStreamingEnabled);
-        SelectedCohereModel = CohereModels.FirstOrDefault(model => model == settings.CohereModel) ?? CohereModels[0];
-        CohereLanguage = NormalizeLanguage(settings.CohereLanguage);
+        SelectedGroqModel = TranscriptionModelCatalog.GroqModels.FirstOrDefault(model => model == settings.GroqModel) ?? TranscriptionModelCatalog.DefaultGroqModel;
+        GroqLanguage = NormalizeAutoDetectLanguage(settings.GroqLanguage);
+        SelectedFireworksModel = TranscriptionModelCatalog.FireworksModels.FirstOrDefault(model => model == settings.FireworksModel) ?? TranscriptionModelCatalog.DefaultFireworksModel;
+        FireworksLanguage = NormalizeAutoDetectLanguage(settings.FireworksLanguage);
+        SelectedDeepgramModel = AvailableDeepgramModels.FirstOrDefault(model => model == settings.DeepgramModel) ?? TranscriptionModelCatalog.GetDefaultDeepgramModel(settings.DeepgramStreamingEnabled);
+        SelectedMistralModel = AvailableMistralModels.FirstOrDefault(model => model == settings.MistralModel) ?? TranscriptionModelCatalog.GetDefaultMistralModel(settings.MistralStreamingEnabled);
+        SelectedCohereModel = TranscriptionModelCatalog.CohereModels.FirstOrDefault(model => model == settings.CohereModel) ?? TranscriptionModelCatalog.DefaultCohereModel;
+        CohereLanguage = NormalizeExplicitLanguage(settings.CohereLanguage);
+        SelectedElevenLabsModel = AvailableElevenLabsModels.FirstOrDefault(model => model == settings.ElevenLabsModel) ?? TranscriptionModelCatalog.GetDefaultElevenLabsModel(settings.ElevenLabsStreamingEnabled);
+        ElevenLabsLanguage = NormalizeAutoDetectLanguage(settings.ElevenLabsLanguage);
         _pendingHotkey = settings.Hotkey;
         _pendingPasteLastTranscriptHotkey = settings.PasteLastTranscriptHotkey;
         _pendingOpenHistoryHotkey = settings.OpenHistoryHotkey;
@@ -681,6 +729,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             DeepgramApiKey = DeepgramApiKey.Trim(),
             MistralApiKey = MistralApiKey.Trim(),
             CohereApiKey = CohereApiKey.Trim(),
+            ElevenLabsApiKey = ElevenLabsApiKey.Trim(),
             Hotkey = _pendingHotkey,
             PasteLastTranscriptHotkey = _pendingPasteLastTranscriptHotkey,
             OpenHistoryHotkey = _pendingOpenHistoryHotkey,
@@ -695,17 +744,21 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             FetchedLlmGroqModels = _fetchedLlmGroqModels,
             CerebrasModel = string.IsNullOrWhiteSpace(SelectedCerebrasModel) ? AvailableCerebrasModels[0] : SelectedCerebrasModel,
             LlmGroqModel = string.IsNullOrWhiteSpace(SelectedLlmGroqModel) ? AvailableLlmGroqModels[0] : SelectedLlmGroqModel,
-            GroqModel = string.IsNullOrWhiteSpace(SelectedGroqModel) ? GroqModels[0] : SelectedGroqModel,
-            GroqLanguage = NormalizeLanguage(GroqLanguage),
-            FireworksModel = string.IsNullOrWhiteSpace(SelectedFireworksModel) ? FireworksModels[0] : SelectedFireworksModel,
-            FireworksLanguage = NormalizeLanguage(FireworksLanguage),
-            DeepgramModel = string.IsNullOrWhiteSpace(SelectedDeepgramModel) ? GetDefaultDeepgramModel(DeepgramStreamingEnabled) : SelectedDeepgramModel,
+            GroqModel = string.IsNullOrWhiteSpace(SelectedGroqModel) ? TranscriptionModelCatalog.DefaultGroqModel : SelectedGroqModel,
+            GroqLanguage = NormalizeAutoDetectLanguage(GroqLanguage),
+            FireworksModel = string.IsNullOrWhiteSpace(SelectedFireworksModel) ? TranscriptionModelCatalog.DefaultFireworksModel : SelectedFireworksModel,
+            FireworksLanguage = NormalizeAutoDetectLanguage(FireworksLanguage),
+            DeepgramModel = TranscriptionModelCatalog.NormalizeDeepgramModel(SelectedDeepgramModel, DeepgramStreamingEnabled),
             DeepgramLanguage = "en",
             DeepgramStreamingEnabled = DeepgramStreamingEnabled,
-            MistralRealtimeEnabled = MistralRealtimeEnabled,
+            MistralModel = TranscriptionModelCatalog.NormalizeMistralModel(SelectedMistralModel, MistralStreamingEnabled),
+            MistralStreamingEnabled = MistralStreamingEnabled,
             MistralRealtimeMode = MistralRealtimeMode,
-            CohereModel = string.IsNullOrWhiteSpace(SelectedCohereModel) ? CohereModels[0] : SelectedCohereModel,
-            CohereLanguage = NormalizeLanguage(CohereLanguage),
+            CohereModel = string.IsNullOrWhiteSpace(SelectedCohereModel) ? TranscriptionModelCatalog.DefaultCohereModel : SelectedCohereModel,
+            CohereLanguage = NormalizeExplicitLanguage(CohereLanguage),
+            ElevenLabsModel = TranscriptionModelCatalog.NormalizeElevenLabsModel(SelectedElevenLabsModel, ElevenLabsStreamingEnabled),
+            ElevenLabsStreamingEnabled = ElevenLabsStreamingEnabled,
+            ElevenLabsLanguage = NormalizeAutoDetectLanguage(ElevenLabsLanguage),
             HasCompletedInitialSetup = true,
         };
     }
@@ -784,15 +837,25 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         return Math.Clamp((int)Math.Round(value), 0, 500);
     }
 
-    private static string NormalizeLanguage(string? value)
+    private static string NormalizeAutoDetectLanguage(string? value)
     {
         if (string.IsNullOrWhiteSpace(value))
         {
-            return "en";
+            return "auto";
         }
 
         var normalized = value.Trim().ToLowerInvariant();
         return normalized == "auto" ? "auto" : normalized;
+    }
+
+    private static string NormalizeExplicitLanguage(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value) || string.Equals(value.Trim(), "auto", StringComparison.OrdinalIgnoreCase))
+        {
+            return "en";
+        }
+
+        return value.Trim().ToLowerInvariant();
     }
 
     private static bool AreSettingsEquivalent(AppSettings left, AppSettings right)
@@ -808,6 +871,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
                string.Equals(left.DeepgramApiKey, right.DeepgramApiKey, StringComparison.Ordinal) &&
                string.Equals(left.MistralApiKey, right.MistralApiKey, StringComparison.Ordinal) &&
                string.Equals(left.CohereApiKey, right.CohereApiKey, StringComparison.Ordinal) &&
+               string.Equals(left.ElevenLabsApiKey, right.ElevenLabsApiKey, StringComparison.Ordinal) &&
                Equals(left.Hotkey, right.Hotkey) &&
                Equals(left.PasteLastTranscriptHotkey, right.PasteLastTranscriptHotkey) &&
                Equals(left.OpenHistoryHotkey, right.OpenHistoryHotkey) &&
@@ -827,16 +891,15 @@ public sealed class MainViewModel : ObservableObject, IDisposable
                string.Equals(left.DeepgramModel, right.DeepgramModel, StringComparison.Ordinal) &&
                string.Equals(left.DeepgramLanguage, right.DeepgramLanguage, StringComparison.Ordinal) &&
                left.DeepgramStreamingEnabled == right.DeepgramStreamingEnabled &&
-               left.MistralRealtimeEnabled == right.MistralRealtimeEnabled &&
+               string.Equals(left.MistralModel, right.MistralModel, StringComparison.Ordinal) &&
+               left.MistralStreamingEnabled == right.MistralStreamingEnabled &&
                left.MistralRealtimeMode == right.MistralRealtimeMode &&
                string.Equals(left.CohereModel, right.CohereModel, StringComparison.Ordinal) &&
                string.Equals(left.CohereLanguage, right.CohereLanguage, StringComparison.Ordinal) &&
+               string.Equals(left.ElevenLabsModel, right.ElevenLabsModel, StringComparison.Ordinal) &&
+               left.ElevenLabsStreamingEnabled == right.ElevenLabsStreamingEnabled &&
+               string.Equals(left.ElevenLabsLanguage, right.ElevenLabsLanguage, StringComparison.Ordinal) &&
                left.HasCompletedInitialSetup == right.HasCompletedInitialSetup;
-    }
-
-    private static string GetDefaultDeepgramModel(bool streamingEnabled)
-    {
-        return streamingEnabled ? DeepgramStreamingModels[0] : DeepgramBatchModels[0];
     }
 
     private static void ReplaceModels(ObservableCollection<string> target, IReadOnlyList<string> source)
@@ -860,6 +923,14 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     }
 
     private static string SelectPreferredModel(ObservableCollection<string> models, string? selectedModel, string fallbackModel)
+    {
+        var normalizedSelectedModel = string.IsNullOrWhiteSpace(selectedModel) ? fallbackModel : selectedModel.Trim();
+        return models.FirstOrDefault(model => string.Equals(model, normalizedSelectedModel, StringComparison.Ordinal))
+            ?? models.FirstOrDefault()
+            ?? fallbackModel;
+    }
+
+    private static string SelectPreferredProviderModel(IReadOnlyList<string> models, string? selectedModel, string fallbackModel)
     {
         var normalizedSelectedModel = string.IsNullOrWhiteSpace(selectedModel) ? fallbackModel : selectedModel.Trim();
         return models.FirstOrDefault(model => string.Equals(model, normalizedSelectedModel, StringComparison.Ordinal))

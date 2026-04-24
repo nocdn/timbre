@@ -7,4 +7,5 @@ public enum TranscriptionProvider
     Deepgram,
     Mistral,
     Cohere,
+    ElevenLabs,
 }

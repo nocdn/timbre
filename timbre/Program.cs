@@ -96,6 +96,14 @@ public static class Program
             };
             return new CohereTranscriptionClient(httpClient);
         });
+        services.AddSingleton<ElevenLabsTranscriptionClient>(_ =>
+        {
+            var httpClient = new HttpClient
+            {
+                Timeout = TimeSpan.FromMinutes(2),
+            };
+            return new ElevenLabsTranscriptionClient(httpClient);
+        });
         services.AddSingleton<LlmTranscriptPostProcessor>(_ =>
         {
             var httpClient = new HttpClient
@@ -114,6 +122,7 @@ public static class Program
         });
         services.AddSingleton<DeepgramStreamingTranscriptionClient>();
         services.AddSingleton<MistralRealtimeTranscriptionClient>();
+        services.AddSingleton<ElevenLabsRealtimeTranscriptionClient>();
         services.AddSingleton<ITranscriptionClientFactory, TranscriptionClientFactory>();
         services.AddSingleton<IDictationController, DictationController>();
         services.AddSingleton<MainViewModel>();

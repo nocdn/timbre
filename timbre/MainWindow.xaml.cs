@@ -111,6 +111,7 @@ public sealed partial class MainWindow : Window
             DeepgramProviderRadioButton.IsChecked = _viewModel.IsDeepgramSelected;
             MistralProviderRadioButton.IsChecked = _viewModel.IsMistralSelected;
             CohereProviderRadioButton.IsChecked = _viewModel.IsCohereSelected;
+            ElevenLabsProviderRadioButton.IsChecked = _viewModel.IsElevenLabsSelected;
             LlmPostProcessingToggle.IsOn = _viewModel.LlmPostProcessingEnabled;
             CerebrasLlmProviderRadioButton.IsChecked = _viewModel.IsCerebrasLlmSelected;
             GroqLlmProviderRadioButton.IsChecked = _viewModel.IsGroqLlmSelected;
@@ -141,13 +142,21 @@ public sealed partial class MainWindow : Window
             DeepgramModelComboBox.ItemsSource = _viewModel.AvailableDeepgramModels;
             DeepgramModelComboBox.SelectedItem = _viewModel.SelectedDeepgramModel;
             MistralApiKeyBox.Password = _viewModel.MistralApiKey;
-            MistralRealtimeToggle.IsOn = _viewModel.MistralRealtimeEnabled;
-            MistralRealtimeModeComboBox.SelectedIndex = _viewModel.MistralRealtimeMode == MistralRealtimeMode.Slow ? 1 : 0;
-            MistralRealtimeModeComboBox.IsEnabled = _viewModel.MistralRealtimeEnabled;
+            MistralStreamingToggle.IsOn = _viewModel.MistralStreamingEnabled;
+            MistralModelComboBox.ItemsSource = _viewModel.AvailableMistralModels;
+            MistralModelComboBox.SelectedItem = _viewModel.SelectedMistralModel;
+            MistralStreamingModeComboBox.SelectedIndex = _viewModel.MistralRealtimeMode == MistralRealtimeMode.Slow ? 1 : 0;
+            MistralStreamingModeComboBox.IsEnabled = _viewModel.MistralStreamingEnabled;
+            MistralStreamingModeComboBox.Visibility = _viewModel.MistralStreamingEnabled ? Visibility.Visible : Visibility.Collapsed;
             CohereApiKeyBox.Password = _viewModel.CohereApiKey;
             CohereModelComboBox.ItemsSource = _viewModel.AvailableCohereModels;
             CohereModelComboBox.SelectedItem = _viewModel.SelectedCohereModel;
             CohereLanguageTextBox.Text = _viewModel.CohereLanguage;
+            ElevenLabsApiKeyBox.Password = _viewModel.ElevenLabsApiKey;
+            ElevenLabsStreamingToggle.IsOn = _viewModel.ElevenLabsStreamingEnabled;
+            ElevenLabsModelComboBox.ItemsSource = _viewModel.AvailableElevenLabsModels;
+            ElevenLabsModelComboBox.SelectedItem = _viewModel.SelectedElevenLabsModel;
+            ElevenLabsLanguageTextBox.Text = _viewModel.ElevenLabsLanguage;
             LlmPostProcessingSettingsPanel.Visibility = _viewModel.LlmPostProcessingSettingsVisibility;
             CerebrasLlmSettingsPanel.Visibility = _viewModel.CerebrasLlmSettingsVisibility;
             GroqLlmSettingsPanel.Visibility = _viewModel.GroqLlmSettingsVisibility;
@@ -156,6 +165,7 @@ public sealed partial class MainWindow : Window
             DeepgramSettingsPanel.Visibility = _viewModel.DeepgramSettingsVisibility;
             MistralSettingsPanel.Visibility = _viewModel.MistralSettingsVisibility;
             CohereSettingsPanel.Visibility = _viewModel.CohereSettingsVisibility;
+            ElevenLabsSettingsPanel.Visibility = _viewModel.ElevenLabsSettingsVisibility;
             RestoreStatusText();
             HotkeyWarningTextBlock.Text = _viewModel.HotkeyWarningMessage;
             HotkeyWarningTextBlock.Visibility = _viewModel.HotkeyWarningVisibility;
@@ -308,14 +318,26 @@ public sealed partial class MainWindow : Window
         QueueAutoSave();
     }
 
-    private void MistralRealtimeToggle_Toggled(object sender, RoutedEventArgs e)
+    private void MistralStreamingToggle_Toggled(object sender, RoutedEventArgs e)
     {
         if (_isApplyingViewModel)
         {
             return;
         }
 
-        _viewModel.MistralRealtimeEnabled = MistralRealtimeToggle.IsOn;
+        _viewModel.MistralStreamingEnabled = MistralStreamingToggle.IsOn;
+        ApplyViewModelToControls();
+        QueueAutoSave();
+    }
+
+    private void ElevenLabsStreamingToggle_Toggled(object sender, RoutedEventArgs e)
+    {
+        if (_isApplyingViewModel)
+        {
+            return;
+        }
+
+        _viewModel.ElevenLabsStreamingEnabled = ElevenLabsStreamingToggle.IsOn;
         ApplyViewModelToControls();
         QueueAutoSave();
     }
@@ -551,9 +573,11 @@ public sealed partial class MainWindow : Window
         _viewModel.DeepgramApiKey = DeepgramApiKeyBox.Password;
         _viewModel.MistralApiKey = MistralApiKeyBox.Password;
         _viewModel.CohereApiKey = CohereApiKeyBox.Password;
+        _viewModel.ElevenLabsApiKey = ElevenLabsApiKeyBox.Password;
         _viewModel.DeepgramStreamingEnabled = DeepgramStreamingToggle.IsOn;
-        _viewModel.MistralRealtimeEnabled = MistralRealtimeToggle.IsOn;
-        _viewModel.MistralRealtimeMode = MistralRealtimeModeComboBox.SelectedIndex == 1
+        _viewModel.MistralStreamingEnabled = MistralStreamingToggle.IsOn;
+        _viewModel.ElevenLabsStreamingEnabled = ElevenLabsStreamingToggle.IsOn;
+        _viewModel.MistralRealtimeMode = MistralStreamingModeComboBox.SelectedIndex == 1
             ? MistralRealtimeMode.Slow
             : MistralRealtimeMode.Fast;
         _viewModel.PushToTalk = PushToTalkToggle.IsOn;
@@ -567,8 +591,11 @@ public sealed partial class MainWindow : Window
         _viewModel.SelectedFireworksModel = FireworksModelComboBox.SelectedItem as string ?? _viewModel.AvailableFireworksModels[0];
         _viewModel.FireworksLanguage = FireworksLanguageTextBox.Text;
         _viewModel.SelectedDeepgramModel = DeepgramModelComboBox.SelectedItem as string ?? _viewModel.AvailableDeepgramModels[0];
+        _viewModel.SelectedMistralModel = MistralModelComboBox.SelectedItem as string ?? _viewModel.AvailableMistralModels[0];
         _viewModel.SelectedCohereModel = CohereModelComboBox.SelectedItem as string ?? _viewModel.AvailableCohereModels[0];
         _viewModel.CohereLanguage = CohereLanguageTextBox.Text;
+        _viewModel.SelectedElevenLabsModel = ElevenLabsModelComboBox.SelectedItem as string ?? _viewModel.AvailableElevenLabsModels[0];
+        _viewModel.ElevenLabsLanguage = ElevenLabsLanguageTextBox.Text;
     }
 
     private LlmPostProcessingProvider GetSelectedLlmPostProcessingProviderFromControls()
@@ -588,6 +615,11 @@ public sealed partial class MainWindow : Window
         if (CohereProviderRadioButton.IsChecked == true)
         {
             return TranscriptionProvider.Cohere;
+        }
+
+        if (ElevenLabsProviderRadioButton.IsChecked == true)
+        {
+            return TranscriptionProvider.ElevenLabs;
         }
 
         if (DeepgramProviderRadioButton.IsChecked == true)

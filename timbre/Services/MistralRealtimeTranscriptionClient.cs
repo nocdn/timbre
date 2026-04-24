@@ -10,13 +10,13 @@ namespace timbre.Services;
 public sealed class MistralRealtimeTranscriptionClient
 {
     private static readonly Uri Endpoint = new("wss://api.mistral.ai/v1/audio/transcriptions/realtime");
-    private const string Model = "voxtral-mini-transcribe-realtime-2602";
     private const string AudioEncoding = "pcm_s16le";
     private const int SampleRate = 16000;
     private const int MaxAudioBytesPerAppend = 262144;
 
     public async Task<MistralRealtimeSession> ConnectAsync(
         string apiKey,
+        string model,
         int targetStreamingDelayMs,
         Func<string, CancellationToken, Task>? transcriptChunkHandler = null,
         CancellationToken cancellationToken = default)
@@ -31,7 +31,8 @@ public sealed class MistralRealtimeTranscriptionClient
             throw new TranscriptionException("The Mistral streaming delay is invalid.", false);
         }
 
-        var endpoint = BuildEndpoint();
+        var resolvedModel = TranscriptionModelCatalog.NormalizeMistralModel(model, streamingEnabled: true);
+        var endpoint = BuildEndpoint(resolvedModel);
         var webSocket = new ClientWebSocket();
         webSocket.Options.KeepAliveInterval = TimeSpan.FromSeconds(10);
         webSocket.Options.SetRequestHeader("Authorization", $"Bearer {apiKey.Trim()}");
@@ -40,14 +41,14 @@ public sealed class MistralRealtimeTranscriptionClient
         try
         {
             DiagnosticsLogger.Info(
-                $"Mistral realtime connection starting. Endpoint={endpoint}, Model={Model}, TargetDelayMs={targetStreamingDelayMs}, AudioEncoding={AudioEncoding}, SampleRate={SampleRate}.");
+                $"Mistral realtime connection starting. Endpoint={endpoint}, Model={resolvedModel}, TargetDelayMs={targetStreamingDelayMs}, AudioEncoding={AudioEncoding}, SampleRate={SampleRate}.");
 
             await webSocket.ConnectAsync(endpoint, cancellationToken);
 
             session = new MistralRealtimeSession(webSocket, targetStreamingDelayMs, transcriptChunkHandler);
             await session.InitializeAsync(cancellationToken);
             DiagnosticsLogger.Info(
-                $"Mistral realtime connection established. Endpoint={endpoint}, Model={Model}, TargetDelayMs={targetStreamingDelayMs}.");
+                $"Mistral realtime connection established. Endpoint={endpoint}, Model={resolvedModel}, TargetDelayMs={targetStreamingDelayMs}.");
             return session;
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
@@ -79,11 +80,11 @@ public sealed class MistralRealtimeTranscriptionClient
         }
     }
 
-    private static Uri BuildEndpoint()
+    private static Uri BuildEndpoint(string model)
     {
         return new UriBuilder(Endpoint)
         {
-            Query = $"model={Uri.EscapeDataString(Model)}",
+            Query = $"model={Uri.EscapeDataString(model)}",
         }.Uri;
     }
 

@@ -116,7 +116,8 @@ public sealed class DictationControllerPostProcessingTests
             notifications,
             new LlmTranscriptPostProcessor(new HttpClient(handler)),
             new DeepgramStreamingTranscriptionClient(),
-            new MistralRealtimeTranscriptionClient());
+            new MistralRealtimeTranscriptionClient(),
+            new ElevenLabsRealtimeTranscriptionClient());
     }
 
     private sealed class StaticResponseHttpMessageHandler : HttpMessageHandler

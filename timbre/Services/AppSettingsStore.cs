@@ -55,8 +55,14 @@ public sealed class AppSettingsStore : IAppSettingsStore
 
             var json = await File.ReadAllTextAsync(_settingsPath, cancellationToken);
             var storedSettings = JsonSerializer.Deserialize<StoredSettings>(json, _serializerOptions) ?? new StoredSettings();
-            var deepgramStreamingEnabled = storedSettings.DeepgramStreamingEnabled ?? InferDeepgramStreamingEnabled(storedSettings.DeepgramModel);
-            var deepgramModel = NormalizeDeepgramModel(storedSettings.DeepgramModel, deepgramStreamingEnabled);
+            var deepgramStreamingEnabled = storedSettings.DeepgramStreamingEnabled ?? TranscriptionModelCatalog.InferDeepgramStreamingEnabled(storedSettings.DeepgramModel);
+            var deepgramModel = TranscriptionModelCatalog.NormalizeDeepgramModel(storedSettings.DeepgramModel, deepgramStreamingEnabled);
+            var mistralStreamingEnabled = storedSettings.MistralStreamingEnabled
+                ?? storedSettings.MistralRealtimeEnabled
+                ?? TranscriptionModelCatalog.InferMistralStreamingEnabled(storedSettings.MistralModel);
+            var mistralModel = TranscriptionModelCatalog.NormalizeMistralModel(storedSettings.MistralModel, mistralStreamingEnabled);
+            var elevenLabsStreamingEnabled = storedSettings.ElevenLabsStreamingEnabled ?? TranscriptionModelCatalog.InferElevenLabsStreamingEnabled(storedSettings.ElevenLabsModel);
+            var elevenLabsModel = TranscriptionModelCatalog.NormalizeElevenLabsModel(storedSettings.ElevenLabsModel, elevenLabsStreamingEnabled);
 
             _currentSettings = new AppSettings
             {
@@ -71,6 +77,7 @@ public sealed class AppSettingsStore : IAppSettingsStore
                 DeepgramApiKey = Decrypt(storedSettings.EncryptedDeepgramApiKey),
                 MistralApiKey = Decrypt(storedSettings.EncryptedMistralApiKey),
                 CohereApiKey = Decrypt(storedSettings.EncryptedCohereApiKey),
+                ElevenLabsApiKey = Decrypt(storedSettings.EncryptedElevenLabsApiKey),
                 Hotkey = storedSettings.Hotkey ?? HotkeyBinding.Default,
                 PasteLastTranscriptHotkey = storedSettings.PasteLastTranscriptHotkey ?? HotkeyBinding.PasteLastTranscriptDefault,
                 OpenHistoryHotkey = storedSettings.OpenHistoryHotkey ?? HotkeyBinding.OpenHistoryDefault,
@@ -88,27 +95,31 @@ public sealed class AppSettingsStore : IAppSettingsStore
                     ? LlmPostProcessingCatalog.DefaultGroqModel
                     : storedSettings.LlmGroqModel,
                 GroqModel = string.IsNullOrWhiteSpace(storedSettings.GroqModel)
-                    ? "whisper-large-v3-turbo"
+                    ? TranscriptionModelCatalog.DefaultGroqModel
                     : storedSettings.GroqModel,
-                GroqLanguage = NormalizeLanguage(storedSettings.GroqLanguage),
+                GroqLanguage = NormalizeAutoDetectLanguage(storedSettings.GroqLanguage),
                 FireworksModel = string.IsNullOrWhiteSpace(storedSettings.FireworksModel)
-                    ? "whisper-v3-turbo"
+                    ? TranscriptionModelCatalog.DefaultFireworksModel
                     : storedSettings.FireworksModel,
-                FireworksLanguage = NormalizeLanguage(storedSettings.FireworksLanguage),
+                FireworksLanguage = NormalizeAutoDetectLanguage(storedSettings.FireworksLanguage),
                 DeepgramModel = deepgramModel,
-                DeepgramLanguage = NormalizeLanguage(storedSettings.DeepgramLanguage),
+                DeepgramLanguage = NormalizeExplicitLanguage(storedSettings.DeepgramLanguage),
                 DeepgramStreamingEnabled = deepgramStreamingEnabled,
-                MistralRealtimeEnabled = storedSettings.MistralRealtimeEnabled ?? false,
+                MistralModel = mistralModel,
+                MistralStreamingEnabled = mistralStreamingEnabled,
                 MistralRealtimeMode = NormalizeMistralRealtimeMode(storedSettings.MistralRealtimeMode),
                 CohereModel = string.IsNullOrWhiteSpace(storedSettings.CohereModel)
-                    ? "cohere-transcribe-03-2026"
+                    ? TranscriptionModelCatalog.DefaultCohereModel
                     : storedSettings.CohereModel,
-                CohereLanguage = NormalizeLanguage(storedSettings.CohereLanguage),
+                CohereLanguage = NormalizeExplicitLanguage(storedSettings.CohereLanguage),
+                ElevenLabsModel = elevenLabsModel,
+                ElevenLabsStreamingEnabled = elevenLabsStreamingEnabled,
+                ElevenLabsLanguage = NormalizeAutoDetectLanguage(storedSettings.ElevenLabsLanguage),
                 HasCompletedInitialSetup = storedSettings.HasCompletedInitialSetup ?? false,
             };
 
             DiagnosticsLogger.Info(
-                $"Settings loaded. SelectedInputDeviceId='{_currentSettings.SelectedInputDeviceId}', Provider='{_currentSettings.Provider}', LlmPostProcessingEnabled={_currentSettings.LlmPostProcessingEnabled}, LlmPostProcessingProvider='{_currentSettings.LlmPostProcessingProvider}', HasGroqApiKey={!string.IsNullOrWhiteSpace(_currentSettings.GroqApiKey)}, HasCerebrasApiKey={!string.IsNullOrWhiteSpace(_currentSettings.CerebrasApiKey)}, HasLlmGroqApiKey={!string.IsNullOrWhiteSpace(_currentSettings.LlmGroqApiKey)}, HasFireworksApiKey={!string.IsNullOrWhiteSpace(_currentSettings.FireworksApiKey)}, HasDeepgramApiKey={!string.IsNullOrWhiteSpace(_currentSettings.DeepgramApiKey)}, HasMistralApiKey={!string.IsNullOrWhiteSpace(_currentSettings.MistralApiKey)}, HasCohereApiKey={!string.IsNullOrWhiteSpace(_currentSettings.CohereApiKey)}, Hotkey='{_currentSettings.Hotkey.ToDisplayString()}', PasteLastTranscriptHotkey='{_currentSettings.PasteLastTranscriptHotkey.ToDisplayString()}', OpenHistoryHotkey='{_currentSettings.OpenHistoryHotkey.ToDisplayString()}', TranscriptHistoryLimit={_currentSettings.TranscriptHistoryLimit}, PushToTalk={_currentSettings.PushToTalk}, LaunchAtStartup={_currentSettings.LaunchAtStartup}, SoundFeedbackEnabled={_currentSettings.SoundFeedbackEnabled}, LlmPromptLength={_currentSettings.LlmPostProcessingPrompt.Length}, FetchedCerebrasModelCount={_currentSettings.FetchedCerebrasModels?.Count ?? 0}, FetchedLlmGroqModelCount={_currentSettings.FetchedLlmGroqModels?.Count ?? 0}, CerebrasModel='{_currentSettings.CerebrasModel}', LlmGroqModel='{_currentSettings.LlmGroqModel}', GroqModel='{_currentSettings.GroqModel}', GroqLanguage='{_currentSettings.GroqLanguage}', FireworksModel='{_currentSettings.FireworksModel}', FireworksLanguage='{_currentSettings.FireworksLanguage}', DeepgramModel='{_currentSettings.DeepgramModel}', DeepgramLanguage='{_currentSettings.DeepgramLanguage}', DeepgramStreamingEnabled={_currentSettings.DeepgramStreamingEnabled}, MistralRealtimeEnabled={_currentSettings.MistralRealtimeEnabled}, MistralRealtimeMode={_currentSettings.MistralRealtimeMode}, CohereModel='{_currentSettings.CohereModel}', CohereLanguage='{_currentSettings.CohereLanguage}', HasCompletedInitialSetup={_currentSettings.HasCompletedInitialSetup}.");
+                $"Settings loaded. SelectedInputDeviceId='{_currentSettings.SelectedInputDeviceId}', Provider='{_currentSettings.Provider}', LlmPostProcessingEnabled={_currentSettings.LlmPostProcessingEnabled}, LlmPostProcessingProvider='{_currentSettings.LlmPostProcessingProvider}', HasGroqApiKey={!string.IsNullOrWhiteSpace(_currentSettings.GroqApiKey)}, HasCerebrasApiKey={!string.IsNullOrWhiteSpace(_currentSettings.CerebrasApiKey)}, HasLlmGroqApiKey={!string.IsNullOrWhiteSpace(_currentSettings.LlmGroqApiKey)}, HasFireworksApiKey={!string.IsNullOrWhiteSpace(_currentSettings.FireworksApiKey)}, HasDeepgramApiKey={!string.IsNullOrWhiteSpace(_currentSettings.DeepgramApiKey)}, HasMistralApiKey={!string.IsNullOrWhiteSpace(_currentSettings.MistralApiKey)}, HasCohereApiKey={!string.IsNullOrWhiteSpace(_currentSettings.CohereApiKey)}, Hotkey='{_currentSettings.Hotkey.ToDisplayString()}', PasteLastTranscriptHotkey='{_currentSettings.PasteLastTranscriptHotkey.ToDisplayString()}', OpenHistoryHotkey='{_currentSettings.OpenHistoryHotkey.ToDisplayString()}', TranscriptHistoryLimit={_currentSettings.TranscriptHistoryLimit}, PushToTalk={_currentSettings.PushToTalk}, LaunchAtStartup={_currentSettings.LaunchAtStartup}, SoundFeedbackEnabled={_currentSettings.SoundFeedbackEnabled}, LlmPromptLength={_currentSettings.LlmPostProcessingPrompt.Length}, FetchedCerebrasModelCount={_currentSettings.FetchedCerebrasModels?.Count ?? 0}, FetchedLlmGroqModelCount={_currentSettings.FetchedLlmGroqModels?.Count ?? 0}, CerebrasModel='{_currentSettings.CerebrasModel}', LlmGroqModel='{_currentSettings.LlmGroqModel}', GroqModel='{_currentSettings.GroqModel}', GroqLanguage='{_currentSettings.GroqLanguage}', FireworksModel='{_currentSettings.FireworksModel}', FireworksLanguage='{_currentSettings.FireworksLanguage}', DeepgramModel='{_currentSettings.DeepgramModel}', DeepgramLanguage='{_currentSettings.DeepgramLanguage}', DeepgramStreamingEnabled={_currentSettings.DeepgramStreamingEnabled}, MistralStreamingEnabled={_currentSettings.MistralStreamingEnabled}, MistralRealtimeMode={_currentSettings.MistralRealtimeMode}, CohereModel='{_currentSettings.CohereModel}', CohereLanguage='{_currentSettings.CohereLanguage}', HasCompletedInitialSetup={_currentSettings.HasCompletedInitialSetup}.");
 
             _hasLoadedSettings = true;
             return _currentSettings;
@@ -134,7 +145,7 @@ public sealed class AppSettingsStore : IAppSettingsStore
         try
         {
             DiagnosticsLogger.Info(
-                $"Saving settings. SelectedInputDeviceId='{settings.SelectedInputDeviceId}', Provider='{settings.Provider}', LlmPostProcessingEnabled={settings.LlmPostProcessingEnabled}, LlmPostProcessingProvider='{settings.LlmPostProcessingProvider}', HasGroqApiKey={!string.IsNullOrWhiteSpace(settings.GroqApiKey)}, HasCerebrasApiKey={!string.IsNullOrWhiteSpace(settings.CerebrasApiKey)}, HasLlmGroqApiKey={!string.IsNullOrWhiteSpace(settings.LlmGroqApiKey)}, HasFireworksApiKey={!string.IsNullOrWhiteSpace(settings.FireworksApiKey)}, HasDeepgramApiKey={!string.IsNullOrWhiteSpace(settings.DeepgramApiKey)}, HasMistralApiKey={!string.IsNullOrWhiteSpace(settings.MistralApiKey)}, HasCohereApiKey={!string.IsNullOrWhiteSpace(settings.CohereApiKey)}, Hotkey='{settings.Hotkey.ToDisplayString()}', PasteLastTranscriptHotkey='{settings.PasteLastTranscriptHotkey.ToDisplayString()}', OpenHistoryHotkey='{settings.OpenHistoryHotkey.ToDisplayString()}', TranscriptHistoryLimit={settings.TranscriptHistoryLimit}, PushToTalk={settings.PushToTalk}, LaunchAtStartup={settings.LaunchAtStartup}, SoundFeedbackEnabled={settings.SoundFeedbackEnabled}, LlmPromptLength={settings.LlmPostProcessingPrompt.Length}, FetchedCerebrasModelCount={settings.FetchedCerebrasModels?.Count ?? 0}, FetchedLlmGroqModelCount={settings.FetchedLlmGroqModels?.Count ?? 0}, CerebrasModel='{settings.CerebrasModel}', LlmGroqModel='{settings.LlmGroqModel}', GroqModel='{settings.GroqModel}', GroqLanguage='{settings.GroqLanguage}', FireworksModel='{settings.FireworksModel}', FireworksLanguage='{settings.FireworksLanguage}', DeepgramModel='{settings.DeepgramModel}', DeepgramLanguage='{settings.DeepgramLanguage}', DeepgramStreamingEnabled={settings.DeepgramStreamingEnabled}, MistralRealtimeEnabled={settings.MistralRealtimeEnabled}, MistralRealtimeMode={settings.MistralRealtimeMode}, CohereModel='{settings.CohereModel}', CohereLanguage='{settings.CohereLanguage}'.");
+                $"Saving settings. SelectedInputDeviceId='{settings.SelectedInputDeviceId}', Provider='{settings.Provider}', LlmPostProcessingEnabled={settings.LlmPostProcessingEnabled}, LlmPostProcessingProvider='{settings.LlmPostProcessingProvider}', HasGroqApiKey={!string.IsNullOrWhiteSpace(settings.GroqApiKey)}, HasCerebrasApiKey={!string.IsNullOrWhiteSpace(settings.CerebrasApiKey)}, HasLlmGroqApiKey={!string.IsNullOrWhiteSpace(settings.LlmGroqApiKey)}, HasFireworksApiKey={!string.IsNullOrWhiteSpace(settings.FireworksApiKey)}, HasDeepgramApiKey={!string.IsNullOrWhiteSpace(settings.DeepgramApiKey)}, HasMistralApiKey={!string.IsNullOrWhiteSpace(settings.MistralApiKey)}, HasCohereApiKey={!string.IsNullOrWhiteSpace(settings.CohereApiKey)}, Hotkey='{settings.Hotkey.ToDisplayString()}', PasteLastTranscriptHotkey='{settings.PasteLastTranscriptHotkey.ToDisplayString()}', OpenHistoryHotkey='{settings.OpenHistoryHotkey.ToDisplayString()}', TranscriptHistoryLimit={settings.TranscriptHistoryLimit}, PushToTalk={settings.PushToTalk}, LaunchAtStartup={settings.LaunchAtStartup}, SoundFeedbackEnabled={settings.SoundFeedbackEnabled}, LlmPromptLength={settings.LlmPostProcessingPrompt.Length}, FetchedCerebrasModelCount={settings.FetchedCerebrasModels?.Count ?? 0}, FetchedLlmGroqModelCount={settings.FetchedLlmGroqModels?.Count ?? 0}, CerebrasModel='{settings.CerebrasModel}', LlmGroqModel='{settings.LlmGroqModel}', GroqModel='{settings.GroqModel}', GroqLanguage='{settings.GroqLanguage}', FireworksModel='{settings.FireworksModel}', FireworksLanguage='{settings.FireworksLanguage}', DeepgramModel='{settings.DeepgramModel}', DeepgramLanguage='{settings.DeepgramLanguage}', DeepgramStreamingEnabled={settings.DeepgramStreamingEnabled}, MistralStreamingEnabled={settings.MistralStreamingEnabled}, MistralRealtimeMode={settings.MistralRealtimeMode}, CohereModel='{settings.CohereModel}', CohereLanguage='{settings.CohereLanguage}'.");
             var storedSettings = new StoredSettings
             {
                 SelectedInputDeviceId = settings.SelectedInputDeviceId,
@@ -148,6 +159,7 @@ public sealed class AppSettingsStore : IAppSettingsStore
                 EncryptedDeepgramApiKey = Encrypt(settings.DeepgramApiKey),
                 EncryptedMistralApiKey = Encrypt(settings.MistralApiKey),
                 EncryptedCohereApiKey = Encrypt(settings.CohereApiKey),
+                EncryptedElevenLabsApiKey = Encrypt(settings.ElevenLabsApiKey),
                 Hotkey = settings.Hotkey,
                 PasteLastTranscriptHotkey = settings.PasteLastTranscriptHotkey,
                 OpenHistoryHotkey = settings.OpenHistoryHotkey,
@@ -161,16 +173,21 @@ public sealed class AppSettingsStore : IAppSettingsStore
                 CerebrasModel = string.IsNullOrWhiteSpace(settings.CerebrasModel) ? LlmPostProcessingCatalog.DefaultCerebrasModel : settings.CerebrasModel,
                 LlmGroqModel = string.IsNullOrWhiteSpace(settings.LlmGroqModel) ? LlmPostProcessingCatalog.DefaultGroqModel : settings.LlmGroqModel,
                 GroqModel = settings.GroqModel,
-                GroqLanguage = NormalizeLanguage(settings.GroqLanguage),
+                GroqLanguage = NormalizeAutoDetectLanguage(settings.GroqLanguage),
                 FireworksModel = settings.FireworksModel,
-                FireworksLanguage = NormalizeLanguage(settings.FireworksLanguage),
-                DeepgramModel = NormalizeDeepgramModel(settings.DeepgramModel, settings.DeepgramStreamingEnabled),
-                DeepgramLanguage = NormalizeLanguage(settings.DeepgramLanguage),
+                FireworksLanguage = NormalizeAutoDetectLanguage(settings.FireworksLanguage),
+                DeepgramModel = TranscriptionModelCatalog.NormalizeDeepgramModel(settings.DeepgramModel, settings.DeepgramStreamingEnabled),
+                DeepgramLanguage = NormalizeExplicitLanguage(settings.DeepgramLanguage),
                 DeepgramStreamingEnabled = settings.DeepgramStreamingEnabled,
-                MistralRealtimeEnabled = settings.MistralRealtimeEnabled,
+                MistralModel = TranscriptionModelCatalog.NormalizeMistralModel(settings.MistralModel, settings.MistralStreamingEnabled),
+                MistralStreamingEnabled = settings.MistralStreamingEnabled,
+                MistralRealtimeEnabled = settings.MistralStreamingEnabled,
                 MistralRealtimeMode = NormalizeMistralRealtimeMode(settings.MistralRealtimeMode),
-                CohereModel = string.IsNullOrWhiteSpace(settings.CohereModel) ? "cohere-transcribe-03-2026" : settings.CohereModel,
-                CohereLanguage = NormalizeLanguage(settings.CohereLanguage),
+                CohereModel = string.IsNullOrWhiteSpace(settings.CohereModel) ? TranscriptionModelCatalog.DefaultCohereModel : settings.CohereModel,
+                CohereLanguage = NormalizeExplicitLanguage(settings.CohereLanguage),
+                ElevenLabsModel = TranscriptionModelCatalog.NormalizeElevenLabsModel(settings.ElevenLabsModel, settings.ElevenLabsStreamingEnabled),
+                ElevenLabsStreamingEnabled = settings.ElevenLabsStreamingEnabled,
+                ElevenLabsLanguage = NormalizeAutoDetectLanguage(settings.ElevenLabsLanguage),
                 HasCompletedInitialSetup = settings.HasCompletedInitialSetup,
             };
 
@@ -189,6 +206,7 @@ public sealed class AppSettingsStore : IAppSettingsStore
                 DeepgramApiKey = settings.DeepgramApiKey,
                 MistralApiKey = settings.MistralApiKey,
                 CohereApiKey = settings.CohereApiKey,
+                ElevenLabsApiKey = settings.ElevenLabsApiKey,
                 Hotkey = settings.Hotkey,
                 PasteLastTranscriptHotkey = settings.PasteLastTranscriptHotkey,
                 OpenHistoryHotkey = settings.OpenHistoryHotkey,
@@ -202,16 +220,20 @@ public sealed class AppSettingsStore : IAppSettingsStore
                 CerebrasModel = string.IsNullOrWhiteSpace(settings.CerebrasModel) ? LlmPostProcessingCatalog.DefaultCerebrasModel : settings.CerebrasModel,
                 LlmGroqModel = string.IsNullOrWhiteSpace(settings.LlmGroqModel) ? LlmPostProcessingCatalog.DefaultGroqModel : settings.LlmGroqModel,
                 GroqModel = settings.GroqModel,
-                GroqLanguage = NormalizeLanguage(settings.GroqLanguage),
+                GroqLanguage = NormalizeAutoDetectLanguage(settings.GroqLanguage),
                 FireworksModel = settings.FireworksModel,
-                FireworksLanguage = NormalizeLanguage(settings.FireworksLanguage),
-                DeepgramModel = NormalizeDeepgramModel(settings.DeepgramModel, settings.DeepgramStreamingEnabled),
-                DeepgramLanguage = NormalizeLanguage(settings.DeepgramLanguage),
+                FireworksLanguage = NormalizeAutoDetectLanguage(settings.FireworksLanguage),
+                DeepgramModel = TranscriptionModelCatalog.NormalizeDeepgramModel(settings.DeepgramModel, settings.DeepgramStreamingEnabled),
+                DeepgramLanguage = NormalizeExplicitLanguage(settings.DeepgramLanguage),
                 DeepgramStreamingEnabled = settings.DeepgramStreamingEnabled,
-                MistralRealtimeEnabled = settings.MistralRealtimeEnabled,
+                MistralModel = TranscriptionModelCatalog.NormalizeMistralModel(settings.MistralModel, settings.MistralStreamingEnabled),
+                MistralStreamingEnabled = settings.MistralStreamingEnabled,
                 MistralRealtimeMode = NormalizeMistralRealtimeMode(settings.MistralRealtimeMode),
-                CohereModel = string.IsNullOrWhiteSpace(settings.CohereModel) ? "cohere-transcribe-03-2026" : settings.CohereModel,
-                CohereLanguage = NormalizeLanguage(settings.CohereLanguage),
+                CohereModel = string.IsNullOrWhiteSpace(settings.CohereModel) ? TranscriptionModelCatalog.DefaultCohereModel : settings.CohereModel,
+                CohereLanguage = NormalizeExplicitLanguage(settings.CohereLanguage),
+                ElevenLabsModel = TranscriptionModelCatalog.NormalizeElevenLabsModel(settings.ElevenLabsModel, settings.ElevenLabsStreamingEnabled),
+                ElevenLabsStreamingEnabled = settings.ElevenLabsStreamingEnabled,
+                ElevenLabsLanguage = NormalizeAutoDetectLanguage(settings.ElevenLabsLanguage),
                 HasCompletedInitialSetup = settings.HasCompletedInitialSetup,
             };
             _hasLoadedSettings = true;
@@ -223,15 +245,25 @@ public sealed class AppSettingsStore : IAppSettingsStore
         }
     }
 
-    private static string NormalizeLanguage(string? value)
+    private static string NormalizeAutoDetectLanguage(string? value)
     {
         if (string.IsNullOrWhiteSpace(value))
         {
-            return "en";
+            return "auto";
         }
 
         var normalized = value.Trim().ToLowerInvariant();
         return normalized == "auto" ? "auto" : normalized;
+    }
+
+    private static string NormalizeExplicitLanguage(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value) || string.Equals(value.Trim(), "auto", StringComparison.OrdinalIgnoreCase))
+        {
+            return "en";
+        }
+
+        return value.Trim().ToLowerInvariant();
     }
 
     private static string NormalizeLlmPostProcessingPrompt(string? value)
@@ -266,22 +298,6 @@ public sealed class AppSettingsStore : IAppSettingsStore
         }
 
         return normalizedModels.Count == 0 ? null : normalizedModels;
-    }
-
-    private static bool InferDeepgramStreamingEnabled(string? model)
-    {
-        var normalized = model?.Trim().ToLowerInvariant();
-
-        return normalized switch
-        {
-            "nova-3" or "nova-3-general" => false,
-            _ => true,
-        };
-    }
-
-    private static string NormalizeDeepgramModel(string? model, bool streamingEnabled)
-    {
-        return streamingEnabled ? "flux" : "nova-3";
     }
 
     private static MistralRealtimeMode NormalizeMistralRealtimeMode(MistralRealtimeMode? mode)
@@ -353,6 +369,8 @@ public sealed class AppSettingsStore : IAppSettingsStore
 
         public string? EncryptedCohereApiKey { get; set; }
 
+        public string? EncryptedElevenLabsApiKey { get; set; }
+
         public TranscriptionProvider? Provider { get; set; }
 
         public bool? LlmPostProcessingEnabled { get; set; }
@@ -397,6 +415,11 @@ public sealed class AppSettingsStore : IAppSettingsStore
 
         public bool? DeepgramStreamingEnabled { get; set; }
 
+        public string? MistralModel { get; set; }
+
+        public bool? MistralStreamingEnabled { get; set; }
+
+        // Legacy setting name. Keep reading it so existing settings files migrate cleanly.
         public bool? MistralRealtimeEnabled { get; set; }
 
         public MistralRealtimeMode? MistralRealtimeMode { get; set; }
@@ -404,6 +427,12 @@ public sealed class AppSettingsStore : IAppSettingsStore
         public string? CohereModel { get; set; }
 
         public string? CohereLanguage { get; set; }
+
+        public string? ElevenLabsModel { get; set; }
+
+        public bool? ElevenLabsStreamingEnabled { get; set; }
+
+        public string? ElevenLabsLanguage { get; set; }
 
         public bool? HasCompletedInitialSetup { get; set; }
     }

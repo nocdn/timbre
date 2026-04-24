@@ -99,7 +99,7 @@ public sealed class GroqTranscriptionClient : ITranscriptionClient
     {
         if (string.IsNullOrWhiteSpace(value))
         {
-            return "en";
+            return null;
         }
 
         var normalized = value.Trim().ToLowerInvariant();

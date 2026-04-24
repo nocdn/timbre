@@ -24,6 +24,8 @@ public sealed class AppSettings
 
     public string? CohereApiKey { get; init; }
 
+    public string? ElevenLabsApiKey { get; init; }
+
     public HotkeyBinding Hotkey { get; init; } = HotkeyBinding.Default;
 
     public HotkeyBinding PasteLastTranscriptHotkey { get; init; } = HotkeyBinding.PasteLastTranscriptDefault;
@@ -48,27 +50,35 @@ public sealed class AppSettings
 
     public string LlmGroqModel { get; init; } = LlmPostProcessingCatalog.DefaultGroqModel;
 
-    public string GroqModel { get; init; } = "whisper-large-v3-turbo";
+    public string GroqModel { get; init; } = TranscriptionModelCatalog.DefaultGroqModel;
 
-    public string GroqLanguage { get; init; } = "en";
+    public string GroqLanguage { get; init; } = "auto";
 
-    public string FireworksModel { get; init; } = "whisper-v3-turbo";
+    public string FireworksModel { get; init; } = TranscriptionModelCatalog.DefaultFireworksModel;
 
-    public string FireworksLanguage { get; init; } = "en";
+    public string FireworksLanguage { get; init; } = "auto";
 
-    public string DeepgramModel { get; init; } = "flux";
+    public string DeepgramModel { get; init; } = TranscriptionModelCatalog.DefaultDeepgramStreamingModel;
 
     public string DeepgramLanguage { get; init; } = "en";
 
     public bool DeepgramStreamingEnabled { get; init; } = true;
 
-    public bool MistralRealtimeEnabled { get; init; }
+    public string MistralModel { get; init; } = TranscriptionModelCatalog.DefaultMistralNonStreamingModel;
+
+    public bool MistralStreamingEnabled { get; init; }
 
     public MistralRealtimeMode MistralRealtimeMode { get; init; } = MistralRealtimeMode.Fast;
 
-    public string CohereModel { get; init; } = "cohere-transcribe-03-2026";
+    public string CohereModel { get; init; } = TranscriptionModelCatalog.DefaultCohereModel;
 
     public string CohereLanguage { get; init; } = "en";
+
+    public string ElevenLabsModel { get; init; } = TranscriptionModelCatalog.DefaultElevenLabsNonStreamingModel;
+
+    public bool ElevenLabsStreamingEnabled { get; init; }
+
+    public string ElevenLabsLanguage { get; init; } = "auto";
 
     public bool HasCompletedInitialSetup { get; init; }
 }

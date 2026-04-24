@@ -15,6 +15,7 @@ public static class LlmPostProcessingCatalog
         - If the speaker corrects themselves, keep only the corrected wording and remove the earlier mistaken wording.
         - Remove accidental duplicated words or phrases caused by speaking naturally, unless the repetition is clearly intentional emphasis.
         - Lightly fix punctuation, capitalization, and spacing so the transcript reads cleanly.
+        - Correct obvious speech-to-text renderings of technical, product, company, API, acronym, and special terms to their conventional spelling, capitalization, and spacing when the intended term is clear.
         - Preserve the original meaning, detail, tone, names, numbers, and technical terms.
         - Do not summarize, add new information, or rewrite the transcript into a different style.
         - Keep the transcript in the same language as the input.
