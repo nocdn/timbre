@@ -262,17 +262,7 @@ public sealed class DictationController : IDictationController
                     : await TranscribeWithRetryAsync(audioBytes, settings, _transcriptionCancellationTokenSource.Token);
 
                 DiagnosticsLogger.Info($"Transcription completed. Provider={settings.Provider}, TranscriptLength={transcription.Length}.");
-
-                if (settings.LlmPostProcessingEnabled)
-                {
-                    PublishStatus(
-                        DictationState.Transcribing,
-                        $"Cleaning transcript with {GetLlmPostProcessingProviderDisplayName(settings.LlmPostProcessingProvider)}...",
-                        true);
-                    transcription = await _llmTranscriptPostProcessor.CleanTranscriptAsync(transcription, settings, _transcriptionCancellationTokenSource.Token);
-                    DiagnosticsLogger.Info(
-                        $"LLM transcript post-processing completed. Provider={settings.LlmPostProcessingProvider}, TranscriptLength={transcription.Length}.");
-                }
+                transcription = await ApplyLlmPostProcessingWithFallbackAsync(transcription, settings, _transcriptionCancellationTokenSource.Token);
             }
             catch (OperationCanceledException)
             {
@@ -432,6 +422,53 @@ public sealed class DictationController : IDictationController
 
         _streamingPasteLock.Dispose();
         _stateLock.Dispose();
+    }
+
+    internal async Task<string> ApplyLlmPostProcessingWithFallbackAsync(
+        string transcription,
+        AppSettings settings,
+        CancellationToken cancellationToken)
+    {
+        if (!settings.LlmPostProcessingEnabled)
+        {
+            return transcription;
+        }
+
+        var providerName = GetLlmPostProcessingProviderDisplayName(settings.LlmPostProcessingProvider);
+
+        try
+        {
+            PublishStatus(
+                DictationState.Transcribing,
+                $"Cleaning transcript with {providerName}...",
+                true);
+
+            var cleanedTranscript = await _llmTranscriptPostProcessor.CleanTranscriptAsync(transcription, settings, cancellationToken);
+            DiagnosticsLogger.Info(
+                $"LLM transcript post-processing completed. Provider={settings.LlmPostProcessingProvider}, TranscriptLength={cleanedTranscript.Length}.");
+            return cleanedTranscript;
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception exception)
+        {
+            DiagnosticsLogger.Error(
+                $"LLM transcript post-processing failed. Provider={settings.LlmPostProcessingProvider}. Falling back to raw transcript.",
+                exception);
+
+            PublishStatus(
+                DictationState.Transcribing,
+                $"{providerName} post-processing failed. Inserting the raw transcript instead.",
+                true);
+            _notificationService.ShowNotification(
+                $"{providerName} post-processing failed",
+                FormatPostProcessingFallbackNotificationMessage(exception.Message),
+                true);
+
+            return transcription;
+        }
     }
 
     private async Task<string> TranscribeWithRetryAsync(byte[] audioBytes, AppSettings settings, CancellationToken cancellationToken)
@@ -737,6 +774,20 @@ public sealed class DictationController : IDictationController
     private static string GetLlmPostProcessingProviderDisplayName(LlmPostProcessingProvider provider)
     {
         return provider == LlmPostProcessingProvider.Groq ? "Groq" : "Cerebras";
+    }
+
+    private static string FormatPostProcessingFallbackNotificationMessage(string errorMessage)
+    {
+        var message = string.IsNullOrWhiteSpace(errorMessage)
+            ? "The post-processing request failed."
+            : errorMessage.Trim();
+
+        if (!message.EndsWith('.') && !message.EndsWith('!') && !message.EndsWith('?'))
+        {
+            message += ".";
+        }
+
+        return $"Error: {message} Inserting the raw transcript instead.";
     }
 
     private static TimeSpan GetAudioDuration(byte[] audioBytes)
