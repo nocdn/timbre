@@ -405,7 +405,10 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         get => _deepgramVadSilenceThresholdSeconds;
         set => SetProperty(
             ref _deepgramVadSilenceThresholdSeconds,
-            TranscriptionProviderCatalog.NormalizeDeepgramVadSilenceThresholdSeconds(value));
+            TranscriptionProviderCatalog.NormalizeVadSilenceThresholdSeconds(
+                TranscriptionProvider.Deepgram,
+                value,
+                streamingEnabled: true));
     }
 
     public string SelectedMistralModel
@@ -455,7 +458,10 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         get => _elevenLabsVadSilenceThresholdSeconds;
         set => SetProperty(
             ref _elevenLabsVadSilenceThresholdSeconds,
-            TranscriptionProviderCatalog.NormalizeElevenLabsVadSilenceThresholdSeconds(value));
+            TranscriptionProviderCatalog.NormalizeVadSilenceThresholdSeconds(
+                TranscriptionProvider.ElevenLabs,
+                value,
+                streamingEnabled: true));
     }
 
     public Visibility DeepgramVadSilenceThresholdVisibility => TranscriptionProviderCatalog.SupportsVadSilenceThreshold(
@@ -708,21 +714,28 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
     private void ApplySettings(AppSettings settings)
     {
+        var groqSettings = settings.GetTranscriptionProviderSettings(TranscriptionProvider.Groq);
+        var fireworksSettings = settings.GetTranscriptionProviderSettings(TranscriptionProvider.Fireworks);
+        var deepgramSettings = settings.GetTranscriptionProviderSettings(TranscriptionProvider.Deepgram);
+        var mistralSettings = settings.GetTranscriptionProviderSettings(TranscriptionProvider.Mistral);
+        var cohereSettings = settings.GetTranscriptionProviderSettings(TranscriptionProvider.Cohere);
+        var elevenLabsSettings = settings.GetTranscriptionProviderSettings(TranscriptionProvider.ElevenLabs);
+
         SelectedProvider = settings.Provider;
         LlmPostProcessingEnabled = settings.LlmPostProcessingEnabled;
         SelectedLlmPostProcessingProvider = settings.LlmPostProcessingProvider;
-        GroqApiKey = settings.GroqApiKey ?? string.Empty;
+        GroqApiKey = groqSettings.ApiKey;
         CerebrasApiKey = settings.CerebrasApiKey ?? string.Empty;
         LlmGroqApiKey = settings.LlmGroqApiKey ?? string.Empty;
-        FireworksApiKey = settings.FireworksApiKey ?? string.Empty;
-        DeepgramApiKey = settings.DeepgramApiKey ?? string.Empty;
-        MistralApiKey = settings.MistralApiKey ?? string.Empty;
-        CohereApiKey = settings.CohereApiKey ?? string.Empty;
-        ElevenLabsApiKey = settings.ElevenLabsApiKey ?? string.Empty;
-        DeepgramStreamingEnabled = settings.DeepgramStreamingEnabled;
-        MistralStreamingEnabled = settings.MistralStreamingEnabled;
+        FireworksApiKey = fireworksSettings.ApiKey;
+        DeepgramApiKey = deepgramSettings.ApiKey;
+        MistralApiKey = mistralSettings.ApiKey;
+        CohereApiKey = cohereSettings.ApiKey;
+        ElevenLabsApiKey = elevenLabsSettings.ApiKey;
+        DeepgramStreamingEnabled = deepgramSettings.StreamingEnabled;
+        MistralStreamingEnabled = mistralSettings.StreamingEnabled;
         MistralRealtimeMode = settings.MistralRealtimeMode;
-        ElevenLabsStreamingEnabled = settings.ElevenLabsStreamingEnabled;
+        ElevenLabsStreamingEnabled = elevenLabsSettings.StreamingEnabled;
         PushToTalk = settings.PushToTalk;
         LaunchAtStartup = settings.LaunchAtStartup;
         SoundFeedbackEnabled = settings.SoundFeedbackEnabled;
@@ -739,18 +752,18 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         EnsureModelAvailable(AvailableLlmGroqModels, settings.LlmGroqModel, LlmPostProcessingCatalog.DefaultGroqModel);
         SelectedCerebrasModel = SelectPreferredModel(AvailableCerebrasModels, settings.CerebrasModel, LlmPostProcessingCatalog.DefaultCerebrasModel);
         SelectedLlmGroqModel = SelectPreferredModel(AvailableLlmGroqModels, settings.LlmGroqModel, LlmPostProcessingCatalog.DefaultGroqModel);
-        SelectedGroqModel = TranscriptionProviderCatalog.NormalizeModel(TranscriptionProvider.Groq, settings.GroqModel);
-        GroqLanguage = TranscriptionProviderCatalog.NormalizeLanguage(TranscriptionProvider.Groq, settings.GroqLanguage);
-        SelectedFireworksModel = TranscriptionProviderCatalog.NormalizeModel(TranscriptionProvider.Fireworks, settings.FireworksModel);
-        FireworksLanguage = TranscriptionProviderCatalog.NormalizeLanguage(TranscriptionProvider.Fireworks, settings.FireworksLanguage);
-        SelectedDeepgramModel = TranscriptionProviderCatalog.NormalizeModel(TranscriptionProvider.Deepgram, settings.DeepgramModel, settings.DeepgramStreamingEnabled);
-        DeepgramVadSilenceThresholdSeconds = TranscriptionProviderCatalog.NormalizeDeepgramVadSilenceThresholdSeconds(settings.DeepgramVadSilenceThresholdSeconds);
-        SelectedMistralModel = TranscriptionProviderCatalog.NormalizeModel(TranscriptionProvider.Mistral, settings.MistralModel, settings.MistralStreamingEnabled);
-        SelectedCohereModel = TranscriptionProviderCatalog.NormalizeModel(TranscriptionProvider.Cohere, settings.CohereModel);
-        CohereLanguage = TranscriptionProviderCatalog.NormalizeLanguage(TranscriptionProvider.Cohere, settings.CohereLanguage);
-        SelectedElevenLabsModel = TranscriptionProviderCatalog.NormalizeModel(TranscriptionProvider.ElevenLabs, settings.ElevenLabsModel, settings.ElevenLabsStreamingEnabled);
-        ElevenLabsLanguage = TranscriptionProviderCatalog.NormalizeLanguage(TranscriptionProvider.ElevenLabs, settings.ElevenLabsLanguage);
-        ElevenLabsVadSilenceThresholdSeconds = TranscriptionProviderCatalog.NormalizeElevenLabsVadSilenceThresholdSeconds(settings.ElevenLabsVadSilenceThresholdSeconds);
+        SelectedGroqModel = groqSettings.Model;
+        GroqLanguage = groqSettings.Language;
+        SelectedFireworksModel = fireworksSettings.Model;
+        FireworksLanguage = fireworksSettings.Language;
+        SelectedDeepgramModel = deepgramSettings.Model;
+        DeepgramVadSilenceThresholdSeconds = deepgramSettings.VadSilenceThresholdSeconds;
+        SelectedMistralModel = mistralSettings.Model;
+        SelectedCohereModel = cohereSettings.Model;
+        CohereLanguage = cohereSettings.Language;
+        SelectedElevenLabsModel = elevenLabsSettings.Model;
+        ElevenLabsLanguage = elevenLabsSettings.Language;
+        ElevenLabsVadSilenceThresholdSeconds = elevenLabsSettings.VadSilenceThresholdSeconds;
         _pendingHotkey = settings.Hotkey;
         _pendingPasteLastTranscriptHotkey = settings.PasteLastTranscriptHotkey;
         _pendingOpenHistoryHotkey = settings.OpenHistoryHotkey;
@@ -762,7 +775,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
     private AppSettings CreateSettingsSnapshot()
     {
-        return new AppSettings
+        return AppSettingsStore.NormalizeSettings(new AppSettings
         {
             SelectedInputDeviceId = SelectedInputDevice?.Id,
             Provider = SelectedProvider,
@@ -790,25 +803,25 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             FetchedLlmGroqModels = _fetchedLlmGroqModels,
             CerebrasModel = string.IsNullOrWhiteSpace(SelectedCerebrasModel) ? AvailableCerebrasModels[0] : SelectedCerebrasModel,
             LlmGroqModel = string.IsNullOrWhiteSpace(SelectedLlmGroqModel) ? AvailableLlmGroqModels[0] : SelectedLlmGroqModel,
-            GroqModel = TranscriptionProviderCatalog.NormalizeModel(TranscriptionProvider.Groq, SelectedGroqModel),
-            GroqLanguage = TranscriptionProviderCatalog.NormalizeLanguage(TranscriptionProvider.Groq, GroqLanguage),
-            FireworksModel = TranscriptionProviderCatalog.NormalizeModel(TranscriptionProvider.Fireworks, SelectedFireworksModel),
-            FireworksLanguage = TranscriptionProviderCatalog.NormalizeLanguage(TranscriptionProvider.Fireworks, FireworksLanguage),
-            DeepgramModel = TranscriptionProviderCatalog.NormalizeModel(TranscriptionProvider.Deepgram, SelectedDeepgramModel, DeepgramStreamingEnabled),
-            DeepgramLanguage = TranscriptionProviderCatalog.NormalizeLanguage(TranscriptionProvider.Deepgram, null),
+            GroqModel = SelectedGroqModel,
+            GroqLanguage = GroqLanguage,
+            FireworksModel = SelectedFireworksModel,
+            FireworksLanguage = FireworksLanguage,
+            DeepgramModel = SelectedDeepgramModel,
+            DeepgramLanguage = string.Empty,
             DeepgramStreamingEnabled = DeepgramStreamingEnabled,
-            DeepgramVadSilenceThresholdSeconds = TranscriptionProviderCatalog.NormalizeDeepgramVadSilenceThresholdSeconds(DeepgramVadSilenceThresholdSeconds),
-            MistralModel = TranscriptionProviderCatalog.NormalizeModel(TranscriptionProvider.Mistral, SelectedMistralModel, MistralStreamingEnabled),
+            DeepgramVadSilenceThresholdSeconds = DeepgramVadSilenceThresholdSeconds,
+            MistralModel = SelectedMistralModel,
             MistralStreamingEnabled = MistralStreamingEnabled,
             MistralRealtimeMode = MistralRealtimeMode,
-            CohereModel = TranscriptionProviderCatalog.NormalizeModel(TranscriptionProvider.Cohere, SelectedCohereModel),
-            CohereLanguage = TranscriptionProviderCatalog.NormalizeLanguage(TranscriptionProvider.Cohere, CohereLanguage),
-            ElevenLabsModel = TranscriptionProviderCatalog.NormalizeModel(TranscriptionProvider.ElevenLabs, SelectedElevenLabsModel, ElevenLabsStreamingEnabled),
+            CohereModel = SelectedCohereModel,
+            CohereLanguage = CohereLanguage,
+            ElevenLabsModel = SelectedElevenLabsModel,
             ElevenLabsStreamingEnabled = ElevenLabsStreamingEnabled,
-            ElevenLabsLanguage = TranscriptionProviderCatalog.NormalizeLanguage(TranscriptionProvider.ElevenLabs, ElevenLabsLanguage),
-            ElevenLabsVadSilenceThresholdSeconds = TranscriptionProviderCatalog.NormalizeElevenLabsVadSilenceThresholdSeconds(ElevenLabsVadSilenceThresholdSeconds),
+            ElevenLabsLanguage = ElevenLabsLanguage,
+            ElevenLabsVadSilenceThresholdSeconds = ElevenLabsVadSilenceThresholdSeconds,
             HasCompletedInitialSetup = true,
-        };
+        });
     }
 
     private async Task LoadHistoryAsync()
@@ -891,14 +904,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
                left.Provider == right.Provider &&
                left.LlmPostProcessingEnabled == right.LlmPostProcessingEnabled &&
                left.LlmPostProcessingProvider == right.LlmPostProcessingProvider &&
-               string.Equals(left.GroqApiKey, right.GroqApiKey, StringComparison.Ordinal) &&
                string.Equals(left.CerebrasApiKey, right.CerebrasApiKey, StringComparison.Ordinal) &&
                string.Equals(left.LlmGroqApiKey, right.LlmGroqApiKey, StringComparison.Ordinal) &&
-               string.Equals(left.FireworksApiKey, right.FireworksApiKey, StringComparison.Ordinal) &&
-               string.Equals(left.DeepgramApiKey, right.DeepgramApiKey, StringComparison.Ordinal) &&
-               string.Equals(left.MistralApiKey, right.MistralApiKey, StringComparison.Ordinal) &&
-               string.Equals(left.CohereApiKey, right.CohereApiKey, StringComparison.Ordinal) &&
-               string.Equals(left.ElevenLabsApiKey, right.ElevenLabsApiKey, StringComparison.Ordinal) &&
                Equals(left.Hotkey, right.Hotkey) &&
                Equals(left.PasteLastTranscriptHotkey, right.PasteLastTranscriptHotkey) &&
                Equals(left.OpenHistoryHotkey, right.OpenHistoryHotkey) &&
@@ -911,24 +918,16 @@ public sealed class MainViewModel : ObservableObject, IDisposable
                ModelListsAreEquivalent(left.FetchedLlmGroqModels, right.FetchedLlmGroqModels) &&
                string.Equals(left.CerebrasModel, right.CerebrasModel, StringComparison.Ordinal) &&
                string.Equals(left.LlmGroqModel, right.LlmGroqModel, StringComparison.Ordinal) &&
-               string.Equals(left.GroqModel, right.GroqModel, StringComparison.Ordinal) &&
-               string.Equals(left.GroqLanguage, right.GroqLanguage, StringComparison.Ordinal) &&
-               string.Equals(left.FireworksModel, right.FireworksModel, StringComparison.Ordinal) &&
-               string.Equals(left.FireworksLanguage, right.FireworksLanguage, StringComparison.Ordinal) &&
-               string.Equals(left.DeepgramModel, right.DeepgramModel, StringComparison.Ordinal) &&
-               string.Equals(left.DeepgramLanguage, right.DeepgramLanguage, StringComparison.Ordinal) &&
-               left.DeepgramStreamingEnabled == right.DeepgramStreamingEnabled &&
-               Math.Abs(left.DeepgramVadSilenceThresholdSeconds - right.DeepgramVadSilenceThresholdSeconds) < 0.0001 &&
-               string.Equals(left.MistralModel, right.MistralModel, StringComparison.Ordinal) &&
-               left.MistralStreamingEnabled == right.MistralStreamingEnabled &&
                left.MistralRealtimeMode == right.MistralRealtimeMode &&
-               string.Equals(left.CohereModel, right.CohereModel, StringComparison.Ordinal) &&
-               string.Equals(left.CohereLanguage, right.CohereLanguage, StringComparison.Ordinal) &&
-               string.Equals(left.ElevenLabsModel, right.ElevenLabsModel, StringComparison.Ordinal) &&
-               left.ElevenLabsStreamingEnabled == right.ElevenLabsStreamingEnabled &&
-               string.Equals(left.ElevenLabsLanguage, right.ElevenLabsLanguage, StringComparison.Ordinal) &&
-               Math.Abs(left.ElevenLabsVadSilenceThresholdSeconds - right.ElevenLabsVadSilenceThresholdSeconds) < 0.0001 &&
+               TranscriptionProviderSettingsAreEquivalent(left, right) &&
                left.HasCompletedInitialSetup == right.HasCompletedInitialSetup;
+    }
+
+    private static bool TranscriptionProviderSettingsAreEquivalent(AppSettings left, AppSettings right)
+    {
+        return TranscriptionProviderCatalog.Providers.All(definition =>
+            left.GetTranscriptionProviderSettings(definition.Provider) ==
+            right.GetTranscriptionProviderSettings(definition.Provider));
     }
 
     private static void ReplaceModels(ObservableCollection<string> target, IReadOnlyList<string> source)

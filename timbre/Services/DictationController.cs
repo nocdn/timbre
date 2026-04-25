@@ -80,11 +80,12 @@ public sealed class DictationController : IDictationController
             }
 
             var settings = _settingsStore.CurrentSettings;
-            DiagnosticsLogger.Info($"Starting dictation. Provider={settings.Provider}, PushToTalk={settings.PushToTalk}.");
-            if (!HasProviderApiKey(settings))
+            var providerSettings = settings.GetTranscriptionProviderSettings();
+            DiagnosticsLogger.Info($"Starting dictation. Provider={providerSettings.Provider}, PushToTalk={settings.PushToTalk}.");
+            if (!HasProviderApiKey(providerSettings))
             {
-                PublishStatus(DictationState.Error, GetMissingApiKeyMessage(settings.Provider), false);
-                _notificationService.ShowNotification("API key missing", GetMissingApiKeyMessage(settings.Provider), true);
+                PublishStatus(DictationState.Error, GetMissingApiKeyMessage(providerSettings), false);
+                _notificationService.ShowNotification("API key missing", GetMissingApiKeyMessage(providerSettings), true);
                 return false;
             }
 
@@ -102,14 +103,14 @@ public sealed class DictationController : IDictationController
 
             try
             {
-                if (UsesRealtimeStreaming(settings))
+                if (UsesRealtimeStreaming(providerSettings))
                 {
-                    DiagnosticsLogger.Info($"Preparing {GetProviderDisplayName(settings.Provider)} live streaming session before microphone start.");
+                    DiagnosticsLogger.Info($"Preparing {providerSettings.DisplayName} live streaming session before microphone start.");
                     transcriptionCancellationTokenSource = new CancellationTokenSource();
                     ResetStreamingFailure();
                     ResetStreamingSendChain();
                     ResetStreamingPasteCount();
-                    streamingSession = await CreateRealtimeStreamingSessionAsync(settings, transcriptionCancellationTokenSource.Token);
+                    streamingSession = await CreateRealtimeStreamingSessionAsync(settings, providerSettings, transcriptionCancellationTokenSource.Token);
                     recorder.ChunkAvailable += OnRecorderChunkAvailable;
                     _activeStreamingSession = streamingSession;
                     _transcriptionCancellationTokenSource = transcriptionCancellationTokenSource;
@@ -118,10 +119,10 @@ public sealed class DictationController : IDictationController
                 var device = _audioDeviceService.OpenPreferredCaptureDevice(settings.SelectedInputDeviceId);
                 recorder.Start(device);
                 _activeRecorder = recorder;
-                DiagnosticsLogger.Info($"Recording started. Provider={settings.Provider}, Device='{recorder.DeviceName}', WaveFormat='{recorder.WaveFormatDescription}'.");
+                DiagnosticsLogger.Info($"Recording started. Provider={providerSettings.Provider}, Device='{recorder.DeviceName}', WaveFormat='{recorder.WaveFormatDescription}'.");
                 PublishStatus(
                     DictationState.Recording,
-                    UsesRealtimeStreaming(settings)
+                    UsesRealtimeStreaming(providerSettings)
                         ? "Recording and streaming... release or press the hotkey again to stop."
                         : "Recording... release or press the hotkey again to stop.",
                     false);
@@ -143,8 +144,8 @@ public sealed class DictationController : IDictationController
                 _transcriptionCancellationTokenSource = null;
                 PublishStatus(DictationState.Error, exception.Message, false);
                 _notificationService.ShowNotification(
-                    UsesRealtimeStreaming(settings) && streamingSession is null
-                        ? $"{GetProviderDisplayName(settings.Provider)} connection failed"
+                    UsesRealtimeStreaming(providerSettings) && streamingSession is null
+                        ? $"{providerSettings.DisplayName} connection failed"
                         : "Microphone unavailable",
                     exception.Message,
                     true);
@@ -225,35 +226,35 @@ public sealed class DictationController : IDictationController
             }
 
             var settings = _settingsStore.CurrentSettings;
-            if (!HasProviderApiKey(settings))
+            var providerSettings = settings.GetTranscriptionProviderSettings();
+            if (!HasProviderApiKey(providerSettings))
             {
                 if (streamingSession is not null)
                 {
                     await streamingSession.DisposeAsync();
                 }
 
-                PublishStatus(DictationState.Error, GetMissingApiKeyMessage(settings.Provider), false);
-                _notificationService.ShowNotification("API key missing", GetMissingApiKeyMessage(settings.Provider), true);
+                PublishStatus(DictationState.Error, GetMissingApiKeyMessage(providerSettings), false);
+                _notificationService.ShowNotification("API key missing", GetMissingApiKeyMessage(providerSettings), true);
                 return true;
             }
 
-            if (TryGetUploadLimitBytes(settings, out var uploadLimitBytes) && audioBytes.LongLength > uploadLimitBytes)
+            if (TryGetUploadLimitBytes(providerSettings, out var uploadLimitBytes) && audioBytes.LongLength > uploadLimitBytes)
             {
                 if (streamingSession is not null)
                 {
                     await streamingSession.DisposeAsync();
                 }
 
-                var providerName = GetProviderDisplayName(settings.Provider);
-                PublishStatus(DictationState.Error, $"The recording exceeded {providerName}'s upload limit.", false);
-                _notificationService.ShowNotification("Recording too large", $"The recording exceeded {providerName}'s speech-to-text upload limit.", true);
+                PublishStatus(DictationState.Error, $"The recording exceeded {providerSettings.DisplayName}'s upload limit.", false);
+                _notificationService.ShowNotification("Recording too large", $"The recording exceeded {providerSettings.DisplayName}'s speech-to-text upload limit.", true);
                 return true;
             }
 
             _transcriptionCancellationTokenSource ??= new CancellationTokenSource();
             PublishStatus(
                 DictationState.Transcribing,
-                UsesRealtimeStreaming(settings) ? $"Finalizing {GetProviderDisplayName(settings.Provider)} transcript..." : "Transcribing...",
+                UsesRealtimeStreaming(providerSettings) ? $"Finalizing {providerSettings.DisplayName} transcript..." : "Transcribing...",
                 true);
 
             string transcription;
@@ -261,10 +262,10 @@ public sealed class DictationController : IDictationController
             try
             {
                 transcription = streamingSession is not null
-                    ? await FinalizeRealtimeStreamingAsync(streamingSession, settings.Provider, _transcriptionCancellationTokenSource.Token)
-                    : await TranscribeWithRetryAsync(audioBytes, settings, _transcriptionCancellationTokenSource.Token);
+                    ? await FinalizeRealtimeStreamingAsync(streamingSession, providerSettings.Provider, _transcriptionCancellationTokenSource.Token)
+                    : await TranscribeWithRetryAsync(audioBytes, providerSettings, _transcriptionCancellationTokenSource.Token);
 
-                DiagnosticsLogger.Info($"Transcription completed. Provider={settings.Provider}, TranscriptLength={transcription.Length}.");
+                DiagnosticsLogger.Info($"Transcription completed. Provider={providerSettings.Provider}, TranscriptLength={transcription.Length}.");
                 transcription = await ApplyLlmPostProcessingWithFallbackAsync(transcription, settings, _transcriptionCancellationTokenSource.Token);
             }
             catch (OperationCanceledException)
@@ -299,7 +300,7 @@ public sealed class DictationController : IDictationController
                 _notificationService.ShowNotification("Transcript history failed", exception.Message, true);
             }
 
-            if (streamingSession is null || !UsesLiveChunkPasting(settings))
+            if (streamingSession is null || !UsesLiveChunkPasting(settings, providerSettings))
             {
                 try
                 {
@@ -475,7 +476,10 @@ public sealed class DictationController : IDictationController
         }
     }
 
-    private async Task<string> TranscribeWithRetryAsync(byte[] audioBytes, AppSettings settings, CancellationToken cancellationToken)
+    private async Task<string> TranscribeWithRetryAsync(
+        byte[] audioBytes,
+        TranscriptionProviderSettings providerSettings,
+        CancellationToken cancellationToken)
     {
         for (var attempt = 1; ; attempt++)
         {
@@ -488,11 +492,11 @@ public sealed class DictationController : IDictationController
                     PublishStatus(DictationState.Transcribing, $"Retrying transcription ({attempt}/{MaxRetryCount + 1})...", true);
                 }
 
-                return await GetTranscriptionClient(settings).TranscribeAsync(
+                return await GetTranscriptionClient(providerSettings).TranscribeAsync(
                     audioBytes,
-                    GetApiKey(settings),
-                    GetModel(settings),
-                    GetLanguage(settings),
+                    providerSettings.ApiKey,
+                    providerSettings.Model,
+                    providerSettings.Language,
                     cancellationToken);
             }
             catch (TranscriptionException exception) when (exception.IsTransient && attempt <= MaxRetryCount)
@@ -502,31 +506,34 @@ public sealed class DictationController : IDictationController
         }
     }
 
-    private async Task<IRealtimeTranscriptionSession> CreateRealtimeStreamingSessionAsync(AppSettings settings, CancellationToken cancellationToken)
+    private async Task<IRealtimeTranscriptionSession> CreateRealtimeStreamingSessionAsync(
+        AppSettings settings,
+        TranscriptionProviderSettings providerSettings,
+        CancellationToken cancellationToken)
     {
-        return settings.Provider switch
+        return providerSettings.Provider switch
         {
             TranscriptionProvider.Deepgram => await _deepgramStreamingClient.ConnectAsync(
-                GetApiKey(settings),
-                GetModel(settings),
-                GetLanguage(settings),
-                settings.DeepgramVadSilenceThresholdSeconds,
+                providerSettings.ApiKey,
+                providerSettings.Model,
+                providerSettings.Language,
+                providerSettings.VadSilenceThresholdSeconds,
                 AppendStreamingTranscriptChunkAsync,
                 cancellationToken),
             TranscriptionProvider.Mistral => await _mistralRealtimeClient.ConnectAsync(
-                GetApiKey(settings),
-                GetModel(settings),
+                providerSettings.ApiKey,
+                providerSettings.Model,
                 GetMistralStreamingDelayMilliseconds(settings),
                 AppendStreamingTranscriptChunkAsync,
                 cancellationToken),
             TranscriptionProvider.ElevenLabs => await _elevenLabsRealtimeClient.ConnectAsync(
-                GetApiKey(settings),
-                GetModel(settings),
-                GetLanguage(settings),
-                settings.ElevenLabsVadSilenceThresholdSeconds,
+                providerSettings.ApiKey,
+                providerSettings.Model,
+                providerSettings.Language,
+                providerSettings.VadSilenceThresholdSeconds,
                 AppendStreamingTranscriptChunkAsync,
                 cancellationToken),
-            _ => throw new InvalidOperationException($"{GetProviderDisplayName(settings.Provider)} does not support realtime streaming."),
+            _ => throw new InvalidOperationException($"{providerSettings.DisplayName} does not support realtime streaming."),
         };
     }
 
@@ -712,14 +719,14 @@ public sealed class DictationController : IDictationController
         StatusChanged?.Invoke(this, new DictationStatusChangedEventArgs(state, message, canCancel));
     }
 
-    private ITranscriptionClient GetTranscriptionClient(AppSettings settings)
+    private ITranscriptionClient GetTranscriptionClient(TranscriptionProviderSettings providerSettings)
     {
-        return _transcriptionClientFactory.GetClient(settings.Provider);
+        return _transcriptionClientFactory.GetClient(providerSettings.Provider);
     }
 
-    private static bool HasProviderApiKey(AppSettings settings)
+    private static bool HasProviderApiKey(TranscriptionProviderSettings providerSettings)
     {
-        return !string.IsNullOrWhiteSpace(GetApiKey(settings));
+        return !string.IsNullOrWhiteSpace(providerSettings.ApiKey);
     }
 
     private static bool HasLlmPostProcessingApiKey(AppSettings settings)
@@ -727,42 +734,14 @@ public sealed class DictationController : IDictationController
         return !string.IsNullOrWhiteSpace(GetLlmPostProcessingApiKey(settings));
     }
 
-    private static bool UsesRealtimeStreaming(AppSettings settings)
+    private static bool UsesRealtimeStreaming(TranscriptionProviderSettings providerSettings)
     {
-        return UsesDeepgramStreaming(settings) || UsesMistralStreaming(settings) || UsesElevenLabsRealtime(settings);
+        return providerSettings.UsesRealtimeStreaming;
     }
 
-    private static bool UsesLiveChunkPasting(AppSettings settings)
+    private static bool UsesLiveChunkPasting(AppSettings settings, TranscriptionProviderSettings providerSettings)
     {
-        return !settings.LlmPostProcessingEnabled && (UsesDeepgramStreaming(settings) || UsesMistralStreaming(settings) || UsesElevenLabsRealtime(settings));
-    }
-
-    private static bool UsesDeepgramStreaming(AppSettings settings)
-    {
-        return settings.Provider == TranscriptionProvider.Deepgram && settings.DeepgramStreamingEnabled;
-    }
-
-    private static bool UsesMistralStreaming(AppSettings settings)
-    {
-        return settings.Provider == TranscriptionProvider.Mistral && settings.MistralStreamingEnabled;
-    }
-
-    private static bool UsesElevenLabsRealtime(AppSettings settings)
-    {
-        return settings.Provider == TranscriptionProvider.ElevenLabs && settings.ElevenLabsStreamingEnabled;
-    }
-
-    private static string GetApiKey(AppSettings settings)
-    {
-        return settings.Provider switch
-        {
-            TranscriptionProvider.Fireworks => settings.FireworksApiKey ?? string.Empty,
-            TranscriptionProvider.Deepgram => settings.DeepgramApiKey ?? string.Empty,
-            TranscriptionProvider.Mistral => settings.MistralApiKey ?? string.Empty,
-            TranscriptionProvider.Cohere => settings.CohereApiKey ?? string.Empty,
-            TranscriptionProvider.ElevenLabs => settings.ElevenLabsApiKey ?? string.Empty,
-            _ => settings.GroqApiKey ?? string.Empty,
-        };
+        return !settings.LlmPostProcessingEnabled && providerSettings.UsesRealtimeStreaming;
     }
 
     private static string GetLlmPostProcessingApiKey(AppSettings settings)
@@ -772,32 +751,6 @@ public sealed class DictationController : IDictationController
             : settings.CerebrasApiKey ?? string.Empty;
     }
 
-    private static string GetModel(AppSettings settings)
-    {
-        return settings.Provider switch
-        {
-            TranscriptionProvider.Fireworks => TranscriptionProviderCatalog.NormalizeModel(TranscriptionProvider.Fireworks, settings.FireworksModel),
-            TranscriptionProvider.Deepgram => TranscriptionProviderCatalog.NormalizeModel(TranscriptionProvider.Deepgram, settings.DeepgramModel, settings.DeepgramStreamingEnabled),
-            TranscriptionProvider.Mistral => TranscriptionProviderCatalog.NormalizeModel(TranscriptionProvider.Mistral, settings.MistralModel, settings.MistralStreamingEnabled),
-            TranscriptionProvider.Cohere => TranscriptionProviderCatalog.NormalizeModel(TranscriptionProvider.Cohere, settings.CohereModel),
-            TranscriptionProvider.ElevenLabs => TranscriptionProviderCatalog.NormalizeModel(TranscriptionProvider.ElevenLabs, settings.ElevenLabsModel, settings.ElevenLabsStreamingEnabled),
-            _ => TranscriptionProviderCatalog.NormalizeModel(TranscriptionProvider.Groq, settings.GroqModel),
-        };
-    }
-
-    private static string GetLanguage(AppSettings settings)
-    {
-        return settings.Provider switch
-        {
-            TranscriptionProvider.Fireworks => TranscriptionProviderCatalog.NormalizeLanguage(TranscriptionProvider.Fireworks, settings.FireworksLanguage),
-            TranscriptionProvider.Deepgram => TranscriptionProviderCatalog.NormalizeLanguage(TranscriptionProvider.Deepgram, settings.DeepgramLanguage),
-            TranscriptionProvider.Mistral => TranscriptionProviderCatalog.NormalizeLanguage(TranscriptionProvider.Mistral, null),
-            TranscriptionProvider.Cohere => TranscriptionProviderCatalog.NormalizeLanguage(TranscriptionProvider.Cohere, settings.CohereLanguage),
-            TranscriptionProvider.ElevenLabs => TranscriptionProviderCatalog.NormalizeLanguage(TranscriptionProvider.ElevenLabs, settings.ElevenLabsLanguage),
-            _ => TranscriptionProviderCatalog.NormalizeLanguage(TranscriptionProvider.Groq, settings.GroqLanguage),
-        };
-    }
-
     private static int GetMistralStreamingDelayMilliseconds(AppSettings settings)
     {
         return settings.MistralRealtimeMode == MistralRealtimeMode.Slow
@@ -805,17 +758,10 @@ public sealed class DictationController : IDictationController
             : MistralFastStreamingDelayMs;
     }
 
-    private static string GetMissingApiKeyMessage(TranscriptionProvider provider)
+    private static string GetMissingApiKeyMessage(TranscriptionProviderSettings providerSettings)
     {
-        return provider switch
-        {
-            TranscriptionProvider.Fireworks => "Open Settings and save a Fireworks API key before dictating.",
-            TranscriptionProvider.Deepgram => "Open Settings and save a Deepgram API key before dictating.",
-            TranscriptionProvider.Mistral => "Open Settings and save a Mistral API key before dictating.",
-            TranscriptionProvider.Cohere => "Open Settings and save a Cohere API key before dictating.",
-            TranscriptionProvider.ElevenLabs => "Open Settings and save an ElevenLabs API key before dictating.",
-            _ => "Open Settings and save a Groq API key before dictating.",
-        };
+        var article = providerSettings.Provider == TranscriptionProvider.ElevenLabs ? "an" : "a";
+        return $"Open Settings and save {article} {providerSettings.DisplayName} API key before dictating.";
     }
 
     private static string GetMissingLlmPostProcessingApiKeyMessage(LlmPostProcessingProvider provider)
@@ -825,9 +771,9 @@ public sealed class DictationController : IDictationController
             : "Open Settings and save a Cerebras API key for LLM post-processing before dictating.";
     }
 
-    private static bool TryGetUploadLimitBytes(AppSettings settings, out long uploadLimitBytes)
+    private static bool TryGetUploadLimitBytes(TranscriptionProviderSettings providerSettings, out long uploadLimitBytes)
     {
-        return TranscriptionProviderCatalog.TryGetUploadLimitBytes(settings.Provider, out uploadLimitBytes);
+        return TranscriptionProviderCatalog.TryGetUploadLimitBytes(providerSettings.Provider, out uploadLimitBytes);
     }
 
     private static string GetProviderDisplayName(TranscriptionProvider provider)
