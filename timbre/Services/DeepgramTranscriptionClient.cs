@@ -114,7 +114,7 @@ public sealed class DeepgramTranscriptionClient : ITranscriptionClient
     {
         if (string.IsNullOrWhiteSpace(value))
         {
-            return "nova-3";
+            return TranscriptionProviderCatalog.DefaultDeepgramNonStreamingModel;
         }
 
         return value.Trim().ToLowerInvariant();

@@ -157,6 +157,7 @@ public sealed partial class MainWindow : Window
             ElevenLabsModelComboBox.ItemsSource = _viewModel.AvailableElevenLabsModels;
             ElevenLabsModelComboBox.SelectedItem = _viewModel.SelectedElevenLabsModel;
             ElevenLabsLanguageTextBox.Text = _viewModel.ElevenLabsLanguage;
+            ElevenLabsVadSilenceThresholdNumberBox.Value = _viewModel.ElevenLabsVadSilenceThresholdSeconds;
             LlmPostProcessingSettingsPanel.Visibility = _viewModel.LlmPostProcessingSettingsVisibility;
             CerebrasLlmSettingsPanel.Visibility = _viewModel.CerebrasLlmSettingsVisibility;
             GroqLlmSettingsPanel.Visibility = _viewModel.GroqLlmSettingsVisibility;
@@ -339,6 +340,16 @@ public sealed partial class MainWindow : Window
 
         _viewModel.ElevenLabsStreamingEnabled = ElevenLabsStreamingToggle.IsOn;
         ApplyViewModelToControls();
+        QueueAutoSave();
+    }
+
+    private void ElevenLabsVadSilenceThresholdNumberBox_ValueChanged(NumberBox sender, NumberBoxValueChangedEventArgs args)
+    {
+        if (_isApplyingViewModel || double.IsNaN(sender.Value))
+        {
+            return;
+        }
+
         QueueAutoSave();
     }
 
@@ -596,6 +607,7 @@ public sealed partial class MainWindow : Window
         _viewModel.CohereLanguage = CohereLanguageTextBox.Text;
         _viewModel.SelectedElevenLabsModel = ElevenLabsModelComboBox.SelectedItem as string ?? _viewModel.AvailableElevenLabsModels[0];
         _viewModel.ElevenLabsLanguage = ElevenLabsLanguageTextBox.Text;
+        _viewModel.ElevenLabsVadSilenceThresholdSeconds = ElevenLabsVadSilenceThresholdNumberBox.Value;
     }
 
     private LlmPostProcessingProvider GetSelectedLlmPostProcessingProviderFromControls()

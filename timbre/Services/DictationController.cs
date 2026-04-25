@@ -6,10 +6,6 @@ namespace timbre.Services;
 
 public sealed class DictationController : IDictationController
 {
-    private const long GroqUploadLimitBytes = 25L * 1024 * 1024;
-    private const long FireworksUploadLimitBytes = 1024L * 1024 * 1024;
-    private const long DeepgramUploadLimitBytes = 2L * 1024 * 1024 * 1024;
-    private const long ElevenLabsUploadLimitBytes = 3L * 1024 * 1024 * 1024;
     private const int MistralFastStreamingDelayMs = 240;
     private const int MistralSlowStreamingDelayMs = 2400;
     private const int MaxRetryCount = 2;
@@ -524,6 +520,7 @@ public sealed class DictationController : IDictationController
                 GetApiKey(settings),
                 GetModel(settings),
                 GetLanguage(settings),
+                settings.ElevenLabsVadSilenceThresholdSeconds,
                 AppendStreamingTranscriptChunkAsync,
                 cancellationToken),
             _ => throw new InvalidOperationException($"{GetProviderDisplayName(settings.Provider)} does not support realtime streaming."),
@@ -765,12 +762,12 @@ public sealed class DictationController : IDictationController
     {
         return settings.Provider switch
         {
-            TranscriptionProvider.Fireworks => settings.FireworksModel,
-            TranscriptionProvider.Deepgram => settings.DeepgramModel,
-            TranscriptionProvider.Mistral => TranscriptionModelCatalog.NormalizeMistralModel(settings.MistralModel, settings.MistralStreamingEnabled),
-            TranscriptionProvider.Cohere => settings.CohereModel,
-            TranscriptionProvider.ElevenLabs => TranscriptionModelCatalog.NormalizeElevenLabsModel(settings.ElevenLabsModel, settings.ElevenLabsStreamingEnabled),
-            _ => settings.GroqModel,
+            TranscriptionProvider.Fireworks => TranscriptionProviderCatalog.NormalizeModel(TranscriptionProvider.Fireworks, settings.FireworksModel),
+            TranscriptionProvider.Deepgram => TranscriptionProviderCatalog.NormalizeModel(TranscriptionProvider.Deepgram, settings.DeepgramModel, settings.DeepgramStreamingEnabled),
+            TranscriptionProvider.Mistral => TranscriptionProviderCatalog.NormalizeModel(TranscriptionProvider.Mistral, settings.MistralModel, settings.MistralStreamingEnabled),
+            TranscriptionProvider.Cohere => TranscriptionProviderCatalog.NormalizeModel(TranscriptionProvider.Cohere, settings.CohereModel),
+            TranscriptionProvider.ElevenLabs => TranscriptionProviderCatalog.NormalizeModel(TranscriptionProvider.ElevenLabs, settings.ElevenLabsModel, settings.ElevenLabsStreamingEnabled),
+            _ => TranscriptionProviderCatalog.NormalizeModel(TranscriptionProvider.Groq, settings.GroqModel),
         };
     }
 
@@ -778,12 +775,12 @@ public sealed class DictationController : IDictationController
     {
         return settings.Provider switch
         {
-            TranscriptionProvider.Fireworks => settings.FireworksLanguage,
-            TranscriptionProvider.Deepgram => settings.DeepgramLanguage,
-            TranscriptionProvider.Mistral => "en",
-            TranscriptionProvider.Cohere => settings.CohereLanguage,
-            TranscriptionProvider.ElevenLabs => settings.ElevenLabsLanguage,
-            _ => settings.GroqLanguage,
+            TranscriptionProvider.Fireworks => TranscriptionProviderCatalog.NormalizeLanguage(TranscriptionProvider.Fireworks, settings.FireworksLanguage),
+            TranscriptionProvider.Deepgram => TranscriptionProviderCatalog.NormalizeLanguage(TranscriptionProvider.Deepgram, settings.DeepgramLanguage),
+            TranscriptionProvider.Mistral => TranscriptionProviderCatalog.NormalizeLanguage(TranscriptionProvider.Mistral, null),
+            TranscriptionProvider.Cohere => TranscriptionProviderCatalog.NormalizeLanguage(TranscriptionProvider.Cohere, settings.CohereLanguage),
+            TranscriptionProvider.ElevenLabs => TranscriptionProviderCatalog.NormalizeLanguage(TranscriptionProvider.ElevenLabs, settings.ElevenLabsLanguage),
+            _ => TranscriptionProviderCatalog.NormalizeLanguage(TranscriptionProvider.Groq, settings.GroqLanguage),
         };
     }
 
@@ -816,37 +813,12 @@ public sealed class DictationController : IDictationController
 
     private static bool TryGetUploadLimitBytes(AppSettings settings, out long uploadLimitBytes)
     {
-        switch (settings.Provider)
-        {
-            case TranscriptionProvider.Fireworks:
-                uploadLimitBytes = FireworksUploadLimitBytes;
-                return true;
-            case TranscriptionProvider.Deepgram:
-                uploadLimitBytes = DeepgramUploadLimitBytes;
-                return true;
-            case TranscriptionProvider.ElevenLabs:
-                uploadLimitBytes = ElevenLabsUploadLimitBytes;
-                return true;
-            case TranscriptionProvider.Groq:
-                uploadLimitBytes = GroqUploadLimitBytes;
-                return true;
-            default:
-                uploadLimitBytes = 0;
-                return false;
-        }
+        return TranscriptionProviderCatalog.TryGetUploadLimitBytes(settings.Provider, out uploadLimitBytes);
     }
 
     private static string GetProviderDisplayName(TranscriptionProvider provider)
     {
-        return provider switch
-        {
-            TranscriptionProvider.Fireworks => "Fireworks",
-            TranscriptionProvider.Deepgram => "Deepgram",
-            TranscriptionProvider.Mistral => "Mistral",
-            TranscriptionProvider.Cohere => "Cohere",
-            TranscriptionProvider.ElevenLabs => "ElevenLabs",
-            _ => "Groq",
-        };
+        return TranscriptionProviderCatalog.Get(provider).DisplayName;
     }
 
     private static string GetLlmPostProcessingProviderDisplayName(LlmPostProcessingProvider provider)

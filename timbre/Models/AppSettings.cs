@@ -50,35 +50,37 @@ public sealed class AppSettings
 
     public string LlmGroqModel { get; init; } = LlmPostProcessingCatalog.DefaultGroqModel;
 
-    public string GroqModel { get; init; } = TranscriptionModelCatalog.DefaultGroqModel;
+    public string GroqModel { get; init; } = TranscriptionProviderCatalog.DefaultGroqModel;
 
-    public string GroqLanguage { get; init; } = "auto";
+    public string GroqLanguage { get; init; } = TranscriptionProviderCatalog.Get(TranscriptionProvider.Groq).DefaultLanguage;
 
-    public string FireworksModel { get; init; } = TranscriptionModelCatalog.DefaultFireworksModel;
+    public string FireworksModel { get; init; } = TranscriptionProviderCatalog.DefaultFireworksModel;
 
-    public string FireworksLanguage { get; init; } = "auto";
+    public string FireworksLanguage { get; init; } = TranscriptionProviderCatalog.Get(TranscriptionProvider.Fireworks).DefaultLanguage;
 
-    public string DeepgramModel { get; init; } = TranscriptionModelCatalog.DefaultDeepgramStreamingModel;
+    public string DeepgramModel { get; init; } = TranscriptionProviderCatalog.DefaultDeepgramStreamingModel;
 
-    public string DeepgramLanguage { get; init; } = "en";
+    public string DeepgramLanguage { get; init; } = TranscriptionProviderCatalog.Get(TranscriptionProvider.Deepgram).DefaultLanguage;
 
     public bool DeepgramStreamingEnabled { get; init; } = true;
 
-    public string MistralModel { get; init; } = TranscriptionModelCatalog.DefaultMistralNonStreamingModel;
+    public string MistralModel { get; init; } = TranscriptionProviderCatalog.DefaultMistralNonStreamingModel;
 
     public bool MistralStreamingEnabled { get; init; }
 
     public MistralRealtimeMode MistralRealtimeMode { get; init; } = MistralRealtimeMode.Fast;
 
-    public string CohereModel { get; init; } = TranscriptionModelCatalog.DefaultCohereModel;
+    public string CohereModel { get; init; } = TranscriptionProviderCatalog.DefaultCohereModel;
 
-    public string CohereLanguage { get; init; } = "en";
+    public string CohereLanguage { get; init; } = TranscriptionProviderCatalog.Get(TranscriptionProvider.Cohere).DefaultLanguage;
 
-    public string ElevenLabsModel { get; init; } = TranscriptionModelCatalog.DefaultElevenLabsNonStreamingModel;
+    public string ElevenLabsModel { get; init; } = TranscriptionProviderCatalog.DefaultElevenLabsNonStreamingModel;
 
     public bool ElevenLabsStreamingEnabled { get; init; }
 
-    public string ElevenLabsLanguage { get; init; } = "auto";
+    public string ElevenLabsLanguage { get; init; } = TranscriptionProviderCatalog.Get(TranscriptionProvider.ElevenLabs).DefaultLanguage;
+
+    public double ElevenLabsVadSilenceThresholdSeconds { get; init; } = TranscriptionProviderCatalog.DefaultElevenLabsVadSilenceThresholdSeconds;
 
     public bool HasCompletedInitialSetup { get; init; }
 }

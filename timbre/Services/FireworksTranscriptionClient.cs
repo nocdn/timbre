@@ -30,7 +30,7 @@ public sealed class FireworksTranscriptionClient : ITranscriptionClient
             throw new TranscriptionException("The Fireworks API key is missing.", false);
         }
 
-        var normalizedModel = string.IsNullOrWhiteSpace(model) ? "whisper-v3-turbo" : model.Trim();
+        var normalizedModel = string.IsNullOrWhiteSpace(model) ? TranscriptionProviderCatalog.DefaultFireworksModel : model.Trim();
         var endpoint = normalizedModel == "whisper-v3" ? ProdEndpoint : TurboEndpoint;
 
         try

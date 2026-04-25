@@ -9,7 +9,7 @@ namespace timbre.Services;
 public sealed class CohereTranscriptionClient : ITranscriptionClient
 {
     private static readonly Uri Endpoint = new("https://api.cohere.com/v2/audio/transcriptions");
-    private const string DefaultModel = "cohere-transcribe-03-2026";
+    private const string DefaultModel = TranscriptionProviderCatalog.DefaultCohereModel;
 
     private readonly HttpClient _httpClient;
 

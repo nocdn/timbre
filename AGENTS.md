@@ -120,7 +120,7 @@ installer\bin\Release\timbre.installer.msi
   - When `Streaming` is on, the model picker must show only streaming-compatible models. When `Streaming` is off, it must show only non-streaming/batch/upload models.
   - Providers with no streaming/realtime/live support should not show a `Streaming` toggle.
   - Provider-specific secondary streaming options, such as Mistral's streaming cadence, may be shown only as extra controls; do not use them instead of the standardized `Streaming` toggle and model picker.
-  - Keep provider model lists and filtering logic centralized in `TranscriptionModelCatalog` so UI, persistence, and runtime transcription selection stay aligned.
+  - Keep provider capabilities centralized in `TranscriptionProviderCatalog`: display name, supported models, streaming compatibility, language behavior, upload limits, and defaults. Keep `TranscriptionModelCatalog` only as a compatibility facade for model-only call sites.
 - Keep provider language inputs narrow (`Width="160"`) and use consistent helper text. For providers that support auto-detect, use exactly: `Use ISO-639-1 or ISO-639-3 code.`, `Setting 'auto', the provider will detect it.`, `If left blank, defaults to 'auto'`. For providers that do not support auto-detect, use only: `Use ISO-639-1 or ISO-639-3 code.`
 - Prefer `Streaming` naming in app code for provider live/realtime toggles. When migrating older names such as `MistralRealtimeEnabled`, keep backward compatibility in settings loading.
 - Tray icon context menu reliability was fixed by giving it a dedicated hidden native owner window in `TrayIconService` and de-duping `WM_CONTEXTMENU`/`WM_RBUTTONUP`; avoid reworking that tray/menu path unless you have a clear, reproducible bug.

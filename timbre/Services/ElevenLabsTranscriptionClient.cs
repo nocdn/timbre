@@ -9,8 +9,8 @@ namespace timbre.Services;
 public sealed class ElevenLabsTranscriptionClient : ITranscriptionClient
 {
     private static readonly Uri Endpoint = new("https://api.elevenlabs.io/v1/speech-to-text");
-    private const string DefaultModel = "scribe_v2";
-    private const string RealtimeModel = "scribe_v2_realtime";
+    private const string DefaultModel = TranscriptionProviderCatalog.DefaultElevenLabsNonStreamingModel;
+    private const string RealtimeModel = TranscriptionProviderCatalog.DefaultElevenLabsStreamingModel;
 
     private readonly HttpClient _httpClient;
 

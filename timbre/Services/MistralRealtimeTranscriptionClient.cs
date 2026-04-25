@@ -31,7 +31,7 @@ public sealed class MistralRealtimeTranscriptionClient
             throw new TranscriptionException("The Mistral streaming delay is invalid.", false);
         }
 
-        var resolvedModel = TranscriptionModelCatalog.NormalizeMistralModel(model, streamingEnabled: true);
+        var resolvedModel = TranscriptionProviderCatalog.NormalizeModel(TranscriptionProvider.Mistral, model, streamingEnabled: true);
         var endpoint = BuildEndpoint(resolvedModel);
         var webSocket = new ClientWebSocket();
         webSocket.Options.KeepAliveInterval = TimeSpan.FromSeconds(10);

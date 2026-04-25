@@ -4,6 +4,7 @@ using System.Net.WebSockets;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Globalization;
 using timbre.Interfaces;
 using timbre.Models;
 
@@ -13,7 +14,7 @@ public sealed class ElevenLabsRealtimeTranscriptionClient
 {
     private static readonly Uri Endpoint = new("wss://api.elevenlabs.io/v1/speech-to-text/realtime");
     private static readonly Uri SingleUseTokenEndpoint = new("https://api.elevenlabs.io/v1/single-use-token/realtime_scribe");
-    private const string RealtimeModel = "scribe_v2_realtime";
+    private const string RealtimeModel = TranscriptionProviderCatalog.DefaultElevenLabsStreamingModel;
     private const string AudioFormat = "pcm_16000";
     private const int SampleRate = 16000;
     private readonly HttpClient _httpClient;
@@ -31,6 +32,7 @@ public sealed class ElevenLabsRealtimeTranscriptionClient
         string apiKey,
         string model,
         string? language,
+        double vadSilenceThresholdSeconds,
         Func<string, CancellationToken, Task> transcriptChunkHandler,
         CancellationToken cancellationToken = default)
     {
@@ -46,22 +48,38 @@ public sealed class ElevenLabsRealtimeTranscriptionClient
 
         var resolvedApiKey = apiKey.Trim();
         var resolvedLanguage = NormalizeLanguage(language);
+        var resolvedVadSilenceThresholdSeconds = TranscriptionProviderCatalog.NormalizeElevenLabsVadSilenceThresholdSeconds(vadSilenceThresholdSeconds);
 
         if (_preferSingleUseTokenAuth)
         {
-            return await ConnectWithSingleUseTokenAsync(resolvedApiKey, resolvedLanguage, transcriptChunkHandler, cancellationToken);
+            return await ConnectWithSingleUseTokenAsync(
+                resolvedApiKey,
+                resolvedLanguage,
+                resolvedVadSilenceThresholdSeconds,
+                transcriptChunkHandler,
+                cancellationToken);
         }
 
         try
         {
-            return await ConnectWithApiKeyHeaderAsync(resolvedApiKey, resolvedLanguage, transcriptChunkHandler, cancellationToken);
+            return await ConnectWithApiKeyHeaderAsync(
+                resolvedApiKey,
+                resolvedLanguage,
+                resolvedVadSilenceThresholdSeconds,
+                transcriptChunkHandler,
+                cancellationToken);
         }
         catch (TranscriptionException exception) when (ShouldRetryWithSingleUseToken(exception))
         {
             DiagnosticsLogger.Info(
                 $"ElevenLabs realtime API-key websocket authentication failed during initialization. Retrying with a single-use token. Message='{exception.Message}'.");
 
-            var session = await ConnectWithSingleUseTokenAsync(resolvedApiKey, resolvedLanguage, transcriptChunkHandler, cancellationToken);
+            var session = await ConnectWithSingleUseTokenAsync(
+                resolvedApiKey,
+                resolvedLanguage,
+                resolvedVadSilenceThresholdSeconds,
+                transcriptChunkHandler,
+                cancellationToken);
             _preferSingleUseTokenAuth = true;
             DiagnosticsLogger.Info("ElevenLabs realtime single-use token authentication succeeded. Future sessions will prefer token auth for this app run.");
             return session;
@@ -71,15 +89,17 @@ public sealed class ElevenLabsRealtimeTranscriptionClient
     private async Task<ElevenLabsRealtimeSession> ConnectWithApiKeyHeaderAsync(
         string apiKey,
         string? language,
+        double vadSilenceThresholdSeconds,
         Func<string, CancellationToken, Task> transcriptChunkHandler,
         CancellationToken cancellationToken)
     {
-        var endpoint = BuildEndpoint(language);
+        var endpoint = BuildEndpoint(language, vadSilenceThresholdSeconds);
         return await ConnectWithWebSocketAsync(
             endpoint,
             ConnectionAuthMode.ApiKeyHeader,
             webSocket => webSocket.Options.SetRequestHeader("xi-api-key", apiKey),
             language,
+            vadSilenceThresholdSeconds,
             transcriptChunkHandler,
             cancellationToken);
     }
@@ -87,16 +107,18 @@ public sealed class ElevenLabsRealtimeTranscriptionClient
     private async Task<ElevenLabsRealtimeSession> ConnectWithSingleUseTokenAsync(
         string apiKey,
         string? language,
+        double vadSilenceThresholdSeconds,
         Func<string, CancellationToken, Task> transcriptChunkHandler,
         CancellationToken cancellationToken)
     {
         var singleUseToken = await CreateSingleUseTokenAsync(apiKey, cancellationToken);
-        var endpoint = BuildEndpoint(language, singleUseToken);
+        var endpoint = BuildEndpoint(language, vadSilenceThresholdSeconds, singleUseToken);
         return await ConnectWithWebSocketAsync(
             endpoint,
             ConnectionAuthMode.SingleUseToken,
             configureWebSocket: null,
             language,
+            vadSilenceThresholdSeconds,
             transcriptChunkHandler,
             cancellationToken);
     }
@@ -106,6 +128,7 @@ public sealed class ElevenLabsRealtimeTranscriptionClient
         ConnectionAuthMode authMode,
         Action<ClientWebSocket>? configureWebSocket,
         string? language,
+        double vadSilenceThresholdSeconds,
         Func<string, CancellationToken, Task> transcriptChunkHandler,
         CancellationToken cancellationToken)
     {
@@ -119,14 +142,14 @@ public sealed class ElevenLabsRealtimeTranscriptionClient
         try
         {
             DiagnosticsLogger.Info(
-                $"ElevenLabs realtime connection starting. Endpoint={sanitizedEndpoint}, AuthMode={DescribeAuthMode(authMode)}, Model={RealtimeModel}, AudioFormat={AudioFormat}, SampleRate={SampleRate}, Language='{language ?? "auto"}'.");
+                $"ElevenLabs realtime connection starting. Endpoint={sanitizedEndpoint}, AuthMode={DescribeAuthMode(authMode)}, Model={RealtimeModel}, AudioFormat={AudioFormat}, SampleRate={SampleRate}, Language='{language ?? "auto"}', VadSilenceThresholdSeconds={vadSilenceThresholdSeconds.ToString(CultureInfo.InvariantCulture)}.");
 
             await webSocket.ConnectAsync(endpoint, cancellationToken);
 
             session = new ElevenLabsRealtimeSession(webSocket, transcriptChunkHandler);
             await session.InitializeAsync(cancellationToken);
             DiagnosticsLogger.Info(
-                $"ElevenLabs realtime connection established. Endpoint={sanitizedEndpoint}, AuthMode={DescribeAuthMode(authMode)}, Model={RealtimeModel}, Language='{language ?? "auto"}'.");
+                $"ElevenLabs realtime connection established. Endpoint={sanitizedEndpoint}, AuthMode={DescribeAuthMode(authMode)}, Model={RealtimeModel}, Language='{language ?? "auto"}', VadSilenceThresholdSeconds={vadSilenceThresholdSeconds.ToString(CultureInfo.InvariantCulture)}.");
             return session;
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
@@ -208,7 +231,7 @@ public sealed class ElevenLabsRealtimeTranscriptionClient
         return payload.Token.Trim();
     }
 
-    private static Uri BuildEndpoint(string? language, string? token = null)
+    internal static Uri BuildEndpoint(string? language, double vadSilenceThresholdSeconds, string? token = null)
     {
         var query = new StringBuilder();
         AppendQuery(query, "model_id", RealtimeModel);
@@ -219,6 +242,10 @@ public sealed class ElevenLabsRealtimeTranscriptionClient
 
         AppendQuery(query, "audio_format", AudioFormat);
         AppendQuery(query, "commit_strategy", "vad");
+        AppendQuery(
+            query,
+            "vad_silence_threshold_secs",
+            vadSilenceThresholdSeconds.ToString(CultureInfo.InvariantCulture));
         AppendQuery(query, "include_timestamps", "false");
 
         if (!string.IsNullOrWhiteSpace(language))

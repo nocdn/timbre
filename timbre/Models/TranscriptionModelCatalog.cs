@@ -2,137 +2,91 @@ namespace timbre.Models;
 
 public static class TranscriptionModelCatalog
 {
-    public const string DefaultGroqModel = "whisper-large-v3-turbo";
-    public const string DefaultFireworksModel = "whisper-v3-turbo";
-    public const string DefaultDeepgramStreamingModel = "flux";
-    public const string DefaultDeepgramNonStreamingModel = "nova-3";
-    public const string DefaultMistralStreamingModel = "voxtral-mini-transcribe-realtime-2602";
-    public const string DefaultMistralNonStreamingModel = "voxtral-mini-latest";
-    public const string DefaultCohereModel = "cohere-transcribe-03-2026";
-    public const string DefaultElevenLabsStreamingModel = "scribe_v2_realtime";
-    public const string DefaultElevenLabsNonStreamingModel = "scribe_v2";
+    public static string DefaultGroqModel => TranscriptionProviderCatalog.DefaultGroqModel;
+    public static string DefaultFireworksModel => TranscriptionProviderCatalog.DefaultFireworksModel;
+    public static string DefaultDeepgramStreamingModel => TranscriptionProviderCatalog.DefaultDeepgramStreamingModel;
+    public static string DefaultDeepgramNonStreamingModel => TranscriptionProviderCatalog.DefaultDeepgramNonStreamingModel;
+    public static string DefaultMistralStreamingModel => TranscriptionProviderCatalog.DefaultMistralStreamingModel;
+    public static string DefaultMistralNonStreamingModel => TranscriptionProviderCatalog.DefaultMistralNonStreamingModel;
+    public static string DefaultCohereModel => TranscriptionProviderCatalog.DefaultCohereModel;
+    public static string DefaultElevenLabsStreamingModel => TranscriptionProviderCatalog.DefaultElevenLabsStreamingModel;
+    public static string DefaultElevenLabsNonStreamingModel => TranscriptionProviderCatalog.DefaultElevenLabsNonStreamingModel;
 
-    public static IReadOnlyList<string> GroqModels { get; } =
-    [
-        DefaultGroqModel,
-        "whisper-large-v3",
-    ];
+    public static IReadOnlyList<string> GroqModels => TranscriptionProviderCatalog.GetModelIds(TranscriptionProvider.Groq);
 
-    public static IReadOnlyList<string> FireworksModels { get; } =
-    [
-        DefaultFireworksModel,
-        "whisper-v3",
-    ];
+    public static IReadOnlyList<string> FireworksModels => TranscriptionProviderCatalog.GetModelIds(TranscriptionProvider.Fireworks);
 
-    public static IReadOnlyList<string> DeepgramStreamingModels { get; } =
-    [
-        DefaultDeepgramStreamingModel,
-    ];
+    public static IReadOnlyList<string> DeepgramStreamingModels => TranscriptionProviderCatalog.GetModelIds(TranscriptionProvider.Deepgram, streamingEnabled: true);
 
-    public static IReadOnlyList<string> DeepgramNonStreamingModels { get; } =
-    [
-        DefaultDeepgramNonStreamingModel,
-    ];
+    public static IReadOnlyList<string> DeepgramNonStreamingModels => TranscriptionProviderCatalog.GetModelIds(TranscriptionProvider.Deepgram, streamingEnabled: false);
 
-    public static IReadOnlyList<string> MistralStreamingModels { get; } =
-    [
-        DefaultMistralStreamingModel,
-    ];
+    public static IReadOnlyList<string> MistralStreamingModels => TranscriptionProviderCatalog.GetModelIds(TranscriptionProvider.Mistral, streamingEnabled: true);
 
-    public static IReadOnlyList<string> MistralNonStreamingModels { get; } =
-    [
-        DefaultMistralNonStreamingModel,
-    ];
+    public static IReadOnlyList<string> MistralNonStreamingModels => TranscriptionProviderCatalog.GetModelIds(TranscriptionProvider.Mistral, streamingEnabled: false);
 
-    public static IReadOnlyList<string> CohereModels { get; } =
-    [
-        DefaultCohereModel,
-    ];
+    public static IReadOnlyList<string> CohereModels => TranscriptionProviderCatalog.GetModelIds(TranscriptionProvider.Cohere);
 
-    public static IReadOnlyList<string> ElevenLabsStreamingModels { get; } =
-    [
-        DefaultElevenLabsStreamingModel,
-    ];
+    public static IReadOnlyList<string> ElevenLabsStreamingModels => TranscriptionProviderCatalog.GetModelIds(TranscriptionProvider.ElevenLabs, streamingEnabled: true);
 
-    public static IReadOnlyList<string> ElevenLabsNonStreamingModels { get; } =
-    [
-        DefaultElevenLabsNonStreamingModel,
-    ];
+    public static IReadOnlyList<string> ElevenLabsNonStreamingModels => TranscriptionProviderCatalog.GetModelIds(TranscriptionProvider.ElevenLabs, streamingEnabled: false);
 
     public static IReadOnlyList<string> GetDeepgramModels(bool streamingEnabled)
     {
-        return streamingEnabled ? DeepgramStreamingModels : DeepgramNonStreamingModels;
+        return TranscriptionProviderCatalog.GetModelIds(TranscriptionProvider.Deepgram, streamingEnabled);
     }
 
     public static IReadOnlyList<string> GetMistralModels(bool streamingEnabled)
     {
-        return streamingEnabled ? MistralStreamingModels : MistralNonStreamingModels;
+        return TranscriptionProviderCatalog.GetModelIds(TranscriptionProvider.Mistral, streamingEnabled);
     }
 
     public static IReadOnlyList<string> GetElevenLabsModels(bool streamingEnabled)
     {
-        return streamingEnabled ? ElevenLabsStreamingModels : ElevenLabsNonStreamingModels;
+        return TranscriptionProviderCatalog.GetModelIds(TranscriptionProvider.ElevenLabs, streamingEnabled);
     }
 
     public static string GetDefaultDeepgramModel(bool streamingEnabled)
     {
-        return streamingEnabled ? DefaultDeepgramStreamingModel : DefaultDeepgramNonStreamingModel;
+        return TranscriptionProviderCatalog.GetDefaultModel(TranscriptionProvider.Deepgram, streamingEnabled);
     }
 
     public static string GetDefaultMistralModel(bool streamingEnabled)
     {
-        return streamingEnabled ? DefaultMistralStreamingModel : DefaultMistralNonStreamingModel;
+        return TranscriptionProviderCatalog.GetDefaultModel(TranscriptionProvider.Mistral, streamingEnabled);
     }
 
     public static string GetDefaultElevenLabsModel(bool streamingEnabled)
     {
-        return streamingEnabled ? DefaultElevenLabsStreamingModel : DefaultElevenLabsNonStreamingModel;
+        return TranscriptionProviderCatalog.GetDefaultModel(TranscriptionProvider.ElevenLabs, streamingEnabled);
     }
 
     public static bool InferDeepgramStreamingEnabled(string? model)
     {
-        var normalized = model?.Trim().ToLowerInvariant();
-
-        return normalized switch
-        {
-            DefaultDeepgramNonStreamingModel or "nova-3-general" => false,
-            _ => true,
-        };
+        return TranscriptionProviderCatalog.InferStreamingEnabled(TranscriptionProvider.Deepgram, model);
     }
 
     public static bool InferMistralStreamingEnabled(string? model)
     {
-        return string.Equals(model?.Trim(), DefaultMistralStreamingModel, StringComparison.OrdinalIgnoreCase);
+        return TranscriptionProviderCatalog.InferStreamingEnabled(TranscriptionProvider.Mistral, model);
     }
 
     public static bool InferElevenLabsStreamingEnabled(string? model)
     {
-        return string.Equals(model?.Trim(), DefaultElevenLabsStreamingModel, StringComparison.OrdinalIgnoreCase);
+        return TranscriptionProviderCatalog.InferStreamingEnabled(TranscriptionProvider.ElevenLabs, model);
     }
 
     public static string NormalizeDeepgramModel(string? model, bool streamingEnabled)
     {
-        return SelectSupportedModel(GetDeepgramModels(streamingEnabled), model, GetDefaultDeepgramModel(streamingEnabled));
+        return TranscriptionProviderCatalog.NormalizeModel(TranscriptionProvider.Deepgram, model, streamingEnabled);
     }
 
     public static string NormalizeMistralModel(string? model, bool streamingEnabled)
     {
-        return SelectSupportedModel(GetMistralModels(streamingEnabled), model, GetDefaultMistralModel(streamingEnabled));
+        return TranscriptionProviderCatalog.NormalizeModel(TranscriptionProvider.Mistral, model, streamingEnabled);
     }
 
     public static string NormalizeElevenLabsModel(string? model, bool streamingEnabled)
     {
-        return SelectSupportedModel(GetElevenLabsModels(streamingEnabled), model, GetDefaultElevenLabsModel(streamingEnabled));
-    }
-
-    private static string SelectSupportedModel(IReadOnlyList<string> models, string? selectedModel, string fallbackModel)
-    {
-        if (string.IsNullOrWhiteSpace(selectedModel))
-        {
-            return fallbackModel;
-        }
-
-        return models.FirstOrDefault(model => string.Equals(model, selectedModel.Trim(), StringComparison.OrdinalIgnoreCase))
-            ?? fallbackModel;
+        return TranscriptionProviderCatalog.NormalizeModel(TranscriptionProvider.ElevenLabs, model, streamingEnabled);
     }
 }

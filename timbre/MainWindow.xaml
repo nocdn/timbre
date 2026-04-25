@@ -371,6 +371,23 @@
                                 Text="Use ISO-639-1 or ISO-639-3 code.&#x0a;Setting 'auto', the provider will detect it.&#x0a;If left blank, defaults to 'auto'"
                                 TextWrapping="WrapWholeWords" />
                         </StackPanel>
+
+                        <StackPanel Spacing="6">
+                            <NumberBox
+                                x:Name="ElevenLabsVadSilenceThresholdNumberBox"
+                                Width="160"
+                                HorizontalAlignment="Left"
+                                Header="VAD silence threshold"
+                                Minimum="0.3"
+                                Maximum="3"
+                                SmallChange="0.1"
+                                SpinButtonPlacementMode="Inline"
+                                ValueChanged="ElevenLabsVadSilenceThresholdNumberBox_ValueChanged" />
+                            <TextBlock
+                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                Text="Seconds of silence before ElevenLabs commits a realtime transcript chunk. Lower values commit sooner."
+                                TextWrapping="WrapWholeWords" />
+                        </StackPanel>
                     </StackPanel>
                 </StackPanel>
 

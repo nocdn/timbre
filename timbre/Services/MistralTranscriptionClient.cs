@@ -9,7 +9,7 @@ namespace timbre.Services;
 public sealed class MistralTranscriptionClient : ITranscriptionClient
 {
     private static readonly Uri Endpoint = new("https://api.mistral.ai/v1/audio/transcriptions");
-    private const string DefaultModel = "voxtral-mini-latest";
+    private const string DefaultModel = TranscriptionProviderCatalog.DefaultMistralNonStreamingModel;
 
     private readonly HttpClient _httpClient;
 
