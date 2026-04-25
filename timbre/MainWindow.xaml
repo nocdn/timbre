@@ -255,6 +255,25 @@
                             Header="Deepgram model"
                             PlaceholderText="Select a Deepgram model" />
 
+                        <StackPanel
+                            x:Name="DeepgramVadSilenceThresholdPanel"
+                            Spacing="6">
+                            <NumberBox
+                                x:Name="DeepgramVadSilenceThresholdNumberBox"
+                                Width="160"
+                                HorizontalAlignment="Left"
+                                Header="VAD silence threshold"
+                                Minimum="0.5"
+                                Maximum="10"
+                                SmallChange="0.1"
+                                SpinButtonPlacementMode="Inline"
+                                ValueChanged="DeepgramVadSilenceThresholdNumberBox_ValueChanged" />
+                            <TextBlock
+                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                Text="Seconds of silence before streaming commits a transcript chunk."
+                                TextWrapping="WrapWholeWords" />
+                        </StackPanel>
+
                         <TextBlock
                             Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                             Text="Streaming on pastes transcript chunks while you dictate. Streaming off pastes the final transcript after recording stops. Language is fixed to English for now."
@@ -358,21 +377,9 @@
                             Header="ElevenLabs model"
                             PlaceholderText="Select an ElevenLabs model" />
 
-                        <StackPanel Spacing="6">
-                            <TextBox
-                                x:Name="ElevenLabsLanguageTextBox"
-                                Width="160"
-                                HorizontalAlignment="Left"
-                                Header="Language"
-                                TextChanged="SettingsTextBox_TextChanged"
-                                PlaceholderText="auto" />
-                            <TextBlock
-                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                Text="Use ISO-639-1 or ISO-639-3 code.&#x0a;Setting 'auto', the provider will detect it.&#x0a;If left blank, defaults to 'auto'"
-                                TextWrapping="WrapWholeWords" />
-                        </StackPanel>
-
-                        <StackPanel Spacing="6">
+                        <StackPanel
+                            x:Name="ElevenLabsVadSilenceThresholdPanel"
+                            Spacing="6">
                             <NumberBox
                                 x:Name="ElevenLabsVadSilenceThresholdNumberBox"
                                 Width="160"
@@ -385,7 +392,21 @@
                                 ValueChanged="ElevenLabsVadSilenceThresholdNumberBox_ValueChanged" />
                             <TextBlock
                                 Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                Text="Seconds of silence before ElevenLabs commits a realtime transcript chunk. Lower values commit sooner."
+                                Text="Seconds of silence before streaming commits a transcript chunk."
+                                TextWrapping="WrapWholeWords" />
+                        </StackPanel>
+
+                        <StackPanel Spacing="6">
+                            <TextBox
+                                x:Name="ElevenLabsLanguageTextBox"
+                                Width="160"
+                                HorizontalAlignment="Left"
+                                Header="Language"
+                                TextChanged="SettingsTextBox_TextChanged"
+                                PlaceholderText="auto" />
+                            <TextBlock
+                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                Text="Use ISO-639-1 or ISO-639-3 code.&#x0a;Setting 'auto', the provider will detect it.&#x0a;If left blank, defaults to 'auto'"
                                 TextWrapping="WrapWholeWords" />
                         </StackPanel>
                     </StackPanel>

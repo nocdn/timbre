@@ -120,6 +120,24 @@ public sealed class MainViewModelStreamingModelTests
         settingsStore.CurrentSettings.CohereLanguage.Should().Be("en");
     }
 
+    [Fact]
+    public async Task SaveSettingsAsync_PersistsCleanVadSilenceThresholds()
+    {
+        // Arrange
+        var settingsStore = new FakeAppSettingsStore();
+        var viewModel = CreateViewModel(settingsStore);
+        viewModel.DeepgramVadSilenceThresholdSeconds = 0.7000000015;
+        viewModel.ElevenLabsVadSilenceThresholdSeconds = 0.4999999985;
+
+        // Act
+        var saved = await viewModel.SaveSettingsAsync();
+
+        // Assert
+        saved.Should().BeTrue();
+        settingsStore.CurrentSettings.DeepgramVadSilenceThresholdSeconds.Should().Be(0.7);
+        settingsStore.CurrentSettings.ElevenLabsVadSilenceThresholdSeconds.Should().Be(0.5);
+    }
+
     private static MainViewModel CreateViewModel(FakeAppSettingsStore? settingsStore = null)
     {
         return new MainViewModel(

@@ -199,6 +199,7 @@ public sealed class DictationControllerPostProcessingTests
         public Task InsertTextAsync(
             string text,
             HotkeyBinding? triggeringHotkey = null,
+            TextInsertionMode insertionMode = TextInsertionMode.Auto,
             CancellationToken cancellationToken = default)
         {
             return Task.CompletedTask;

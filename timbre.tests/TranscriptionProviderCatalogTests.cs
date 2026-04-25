@@ -63,6 +63,28 @@ public sealed class TranscriptionProviderCatalogTests
     }
 
     [Fact]
+    public void SupportsVadSilenceThreshold_UsesStreamingModelCapabilities()
+    {
+        // Assert
+        TranscriptionProviderCatalog.SupportsVadSilenceThreshold(TranscriptionProvider.Deepgram, streamingEnabled: true).Should().BeTrue();
+        TranscriptionProviderCatalog.SupportsVadSilenceThreshold(TranscriptionProvider.Deepgram, streamingEnabled: false).Should().BeFalse();
+        TranscriptionProviderCatalog.SupportsVadSilenceThreshold(TranscriptionProvider.ElevenLabs, streamingEnabled: true).Should().BeTrue();
+        TranscriptionProviderCatalog.SupportsVadSilenceThreshold(TranscriptionProvider.ElevenLabs, streamingEnabled: false).Should().BeFalse();
+        TranscriptionProviderCatalog.SupportsVadSilenceThreshold(TranscriptionProvider.Mistral, streamingEnabled: true).Should().BeFalse();
+    }
+
+    [Fact]
+    public void NormalizeVadSilenceThresholdSeconds_UsesProviderRangesAndCleansFloatingPointNoise()
+    {
+        // Assert
+        TranscriptionProviderCatalog.NormalizeDeepgramVadSilenceThresholdSeconds(null).Should().Be(5.0);
+        TranscriptionProviderCatalog.NormalizeDeepgramVadSilenceThresholdSeconds(0.1).Should().Be(0.5);
+        TranscriptionProviderCatalog.NormalizeDeepgramVadSilenceThresholdSeconds(12).Should().Be(10.0);
+        TranscriptionProviderCatalog.NormalizeElevenLabsVadSilenceThresholdSeconds(0.7000000015).Should().Be(0.7);
+        TranscriptionProviderCatalog.NormalizeElevenLabsVadSilenceThresholdSeconds(0.654321).Should().Be(0.654321);
+    }
+
+    [Fact]
     public void TryGetUploadLimitBytes_UsesProviderCatalog()
     {
         // Act

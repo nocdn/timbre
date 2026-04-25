@@ -33,7 +33,11 @@ internal sealed class TextInsertionService : ITextInsertionService
         _unicodeTextTypingService = unicodeTextTypingService;
     }
 
-    public async Task InsertTextAsync(string text, HotkeyBinding? triggeringHotkey = null, CancellationToken cancellationToken = default)
+    public async Task InsertTextAsync(
+        string text,
+        HotkeyBinding? triggeringHotkey = null,
+        TextInsertionMode insertionMode = TextInsertionMode.Auto,
+        CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(text))
         {
@@ -48,7 +52,14 @@ internal sealed class TextInsertionService : ITextInsertionService
             {
                 var stopwatch = Stopwatch.StartNew();
                 cancellationToken.ThrowIfCancellationRequested();
-                DiagnosticsLogger.Info($"InsertTextAsync entered. TextLength={text.Length}, HasTriggeringHotkey={triggeringHotkey is not null}.");
+                DiagnosticsLogger.Info($"InsertTextAsync entered. TextLength={text.Length}, HasTriggeringHotkey={triggeringHotkey is not null}, InsertionMode={insertionMode}.");
+
+                if (insertionMode == TextInsertionMode.PreferUnicodeTyping)
+                {
+                    await _unicodeTextTypingService.TypeTextAsync(text, triggeringHotkey, cancellationToken);
+                    DiagnosticsLogger.Info($"InsertTextAsync completed with preferred Unicode typing. TotalElapsedMs={stopwatch.ElapsedMilliseconds}.");
+                    return;
+                }
 
                 var directInsertionAttempt = _uiAutomationDirectTextInsertionService.TryInsertText(text);
                 if (directInsertionAttempt.Succeeded)

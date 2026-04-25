@@ -64,6 +64,8 @@ public sealed class AppSettings
 
     public bool DeepgramStreamingEnabled { get; init; } = true;
 
+    public double DeepgramVadSilenceThresholdSeconds { get; init; } = TranscriptionProviderCatalog.DefaultDeepgramVadSilenceThresholdSeconds;
+
     public string MistralModel { get; init; } = TranscriptionProviderCatalog.DefaultMistralNonStreamingModel;
 
     public bool MistralStreamingEnabled { get; init; }

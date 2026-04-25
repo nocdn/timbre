@@ -46,6 +46,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private string _groqLanguage = TranscriptionProviderCatalog.Get(TranscriptionProvider.Groq).DefaultLanguage;
     private string _fireworksLanguage = TranscriptionProviderCatalog.Get(TranscriptionProvider.Fireworks).DefaultLanguage;
     private string _selectedDeepgramModel = TranscriptionProviderCatalog.DefaultDeepgramStreamingModel;
+    private double _deepgramVadSilenceThresholdSeconds = TranscriptionProviderCatalog.DefaultDeepgramVadSilenceThresholdSeconds;
     private string _selectedMistralModel = TranscriptionProviderCatalog.DefaultMistralNonStreamingModel;
     private MistralRealtimeMode _mistralRealtimeMode = MistralRealtimeMode.Fast;
     private string _selectedCohereModel = TranscriptionProviderCatalog.DefaultCohereModel;
@@ -264,6 +265,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             if (SetProperty(ref _deepgramStreamingEnabled, value))
             {
                 OnPropertyChanged(nameof(AvailableDeepgramModels));
+                OnPropertyChanged(nameof(DeepgramVadSilenceThresholdVisibility));
 
                 SelectedDeepgramModel = SelectPreferredProviderModel(
                     AvailableDeepgramModels,
@@ -298,6 +300,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             if (SetProperty(ref _elevenLabsStreamingEnabled, value))
             {
                 OnPropertyChanged(nameof(AvailableElevenLabsModels));
+                OnPropertyChanged(nameof(ElevenLabsVadSilenceThresholdVisibility));
 
                 SelectedElevenLabsModel = SelectPreferredProviderModel(
                     AvailableElevenLabsModels,
@@ -388,7 +391,21 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     public string SelectedDeepgramModel
     {
         get => _selectedDeepgramModel;
-        set => SetProperty(ref _selectedDeepgramModel, value);
+        set
+        {
+            if (SetProperty(ref _selectedDeepgramModel, value))
+            {
+                OnPropertyChanged(nameof(DeepgramVadSilenceThresholdVisibility));
+            }
+        }
+    }
+
+    public double DeepgramVadSilenceThresholdSeconds
+    {
+        get => _deepgramVadSilenceThresholdSeconds;
+        set => SetProperty(
+            ref _deepgramVadSilenceThresholdSeconds,
+            TranscriptionProviderCatalog.NormalizeDeepgramVadSilenceThresholdSeconds(value));
     }
 
     public string SelectedMistralModel
@@ -418,7 +435,13 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     public string SelectedElevenLabsModel
     {
         get => _selectedElevenLabsModel;
-        set => SetProperty(ref _selectedElevenLabsModel, value);
+        set
+        {
+            if (SetProperty(ref _selectedElevenLabsModel, value))
+            {
+                OnPropertyChanged(nameof(ElevenLabsVadSilenceThresholdVisibility));
+            }
+        }
     }
 
     public string ElevenLabsLanguage
@@ -434,6 +457,18 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             ref _elevenLabsVadSilenceThresholdSeconds,
             TranscriptionProviderCatalog.NormalizeElevenLabsVadSilenceThresholdSeconds(value));
     }
+
+    public Visibility DeepgramVadSilenceThresholdVisibility => TranscriptionProviderCatalog.SupportsVadSilenceThreshold(
+        TranscriptionProvider.Deepgram,
+        DeepgramStreamingEnabled)
+        ? Visibility.Visible
+        : Visibility.Collapsed;
+
+    public Visibility ElevenLabsVadSilenceThresholdVisibility => TranscriptionProviderCatalog.SupportsVadSilenceThreshold(
+        TranscriptionProvider.ElevenLabs,
+        ElevenLabsStreamingEnabled)
+        ? Visibility.Visible
+        : Visibility.Collapsed;
 
     public string RecordingHotkeyDisplay
     {
@@ -709,6 +744,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         SelectedFireworksModel = TranscriptionProviderCatalog.NormalizeModel(TranscriptionProvider.Fireworks, settings.FireworksModel);
         FireworksLanguage = TranscriptionProviderCatalog.NormalizeLanguage(TranscriptionProvider.Fireworks, settings.FireworksLanguage);
         SelectedDeepgramModel = TranscriptionProviderCatalog.NormalizeModel(TranscriptionProvider.Deepgram, settings.DeepgramModel, settings.DeepgramStreamingEnabled);
+        DeepgramVadSilenceThresholdSeconds = TranscriptionProviderCatalog.NormalizeDeepgramVadSilenceThresholdSeconds(settings.DeepgramVadSilenceThresholdSeconds);
         SelectedMistralModel = TranscriptionProviderCatalog.NormalizeModel(TranscriptionProvider.Mistral, settings.MistralModel, settings.MistralStreamingEnabled);
         SelectedCohereModel = TranscriptionProviderCatalog.NormalizeModel(TranscriptionProvider.Cohere, settings.CohereModel);
         CohereLanguage = TranscriptionProviderCatalog.NormalizeLanguage(TranscriptionProvider.Cohere, settings.CohereLanguage);
@@ -761,6 +797,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             DeepgramModel = TranscriptionProviderCatalog.NormalizeModel(TranscriptionProvider.Deepgram, SelectedDeepgramModel, DeepgramStreamingEnabled),
             DeepgramLanguage = TranscriptionProviderCatalog.NormalizeLanguage(TranscriptionProvider.Deepgram, null),
             DeepgramStreamingEnabled = DeepgramStreamingEnabled,
+            DeepgramVadSilenceThresholdSeconds = TranscriptionProviderCatalog.NormalizeDeepgramVadSilenceThresholdSeconds(DeepgramVadSilenceThresholdSeconds),
             MistralModel = TranscriptionProviderCatalog.NormalizeModel(TranscriptionProvider.Mistral, SelectedMistralModel, MistralStreamingEnabled),
             MistralStreamingEnabled = MistralStreamingEnabled,
             MistralRealtimeMode = MistralRealtimeMode,
@@ -881,6 +918,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
                string.Equals(left.DeepgramModel, right.DeepgramModel, StringComparison.Ordinal) &&
                string.Equals(left.DeepgramLanguage, right.DeepgramLanguage, StringComparison.Ordinal) &&
                left.DeepgramStreamingEnabled == right.DeepgramStreamingEnabled &&
+               Math.Abs(left.DeepgramVadSilenceThresholdSeconds - right.DeepgramVadSilenceThresholdSeconds) < 0.0001 &&
                string.Equals(left.MistralModel, right.MistralModel, StringComparison.Ordinal) &&
                left.MistralStreamingEnabled == right.MistralStreamingEnabled &&
                left.MistralRealtimeMode == right.MistralRealtimeMode &&

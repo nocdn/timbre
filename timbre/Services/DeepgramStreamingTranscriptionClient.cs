@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Net.WebSockets;
+using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -31,6 +32,7 @@ public sealed class DeepgramStreamingTranscriptionClient
         string apiKey,
         string model,
         string? language,
+        double vadSilenceThresholdSeconds,
         Func<string, CancellationToken, Task> transcriptChunkHandler,
         CancellationToken cancellationToken = default)
     {
@@ -42,10 +44,11 @@ public sealed class DeepgramStreamingTranscriptionClient
         var resolvedApiKey = apiKey.Trim();
         var resolvedModel = ResolveModel(model);
         var resolvedLanguage = ResolveLanguage(language);
-        var endpoint = BuildEndpoint(resolvedModel, resolvedLanguage);
+        var resolvedVadSilenceThresholdSeconds = TranscriptionProviderCatalog.NormalizeDeepgramVadSilenceThresholdSeconds(vadSilenceThresholdSeconds);
+        var endpoint = BuildEndpoint(resolvedModel, resolvedLanguage, resolvedVadSilenceThresholdSeconds);
         var authAttempts = await BuildAuthAttemptsAsync(resolvedApiKey, cancellationToken);
 
-        DiagnosticsLogger.Info($"Deepgram streaming connection starting. Endpoint={endpoint}, Model={resolvedModel}, Language='{resolvedLanguage}', UsesV2={UsesV2Endpoint(resolvedModel)}, AuthAttempts={string.Join(", ", authAttempts.Select(attempt => attempt.Description))}.");
+        DiagnosticsLogger.Info($"Deepgram streaming connection starting. Endpoint={endpoint}, Model={resolvedModel}, Language='{resolvedLanguage}', UsesV2={UsesV2Endpoint(resolvedModel)}, VadSilenceThresholdSeconds={resolvedVadSilenceThresholdSeconds.ToString(CultureInfo.InvariantCulture)}, AuthAttempts={string.Join(", ", authAttempts.Select(attempt => attempt.Description))}.");
 
         Exception? lastException = null;
 
@@ -58,7 +61,7 @@ public sealed class DeepgramStreamingTranscriptionClient
                 DiagnosticsLogger.Info($"Attempting Deepgram WebSocket connect. Endpoint={endpoint}, AuthMode={authAttempt.Description}.");
                 webSocket = CreateWebSocket(authAttempt.HeaderValue);
                 await webSocket.ConnectAsync(endpoint, cancellationToken);
-                DiagnosticsLogger.Info($"Deepgram streaming connection established. Endpoint={endpoint}, Model={resolvedModel}, Language='{resolvedLanguage}', AuthMode={authAttempt.Description}.");
+                DiagnosticsLogger.Info($"Deepgram streaming connection established. Endpoint={endpoint}, Model={resolvedModel}, Language='{resolvedLanguage}', VadSilenceThresholdSeconds={resolvedVadSilenceThresholdSeconds.ToString(CultureInfo.InvariantCulture)}, AuthMode={authAttempt.Description}.");
                 return new DeepgramStreamingSession(webSocket, transcriptChunkHandler, resolvedModel, resolvedLanguage);
             }
             catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
@@ -207,10 +210,14 @@ public sealed class DeepgramStreamingTranscriptionClient
         }
     }
 
-    private static Uri BuildEndpoint(string model, string language)
+    internal static Uri BuildEndpoint(string model, string language, double vadSilenceThresholdSeconds)
     {
         var baseEndpoint = UsesV2Endpoint(model) ? V2Endpoint : V1Endpoint;
         var isFluxModel = IsFluxModel(model);
+        var vadSilenceThresholdMilliseconds = TranscriptionProviderCatalog.NormalizeVadSilenceThresholdMilliseconds(
+            TranscriptionProvider.Deepgram,
+            vadSilenceThresholdSeconds,
+            streamingEnabled: true);
         var query = new StringBuilder();
         AppendQuery(query, "model", model);
 
@@ -226,10 +233,12 @@ public sealed class DeepgramStreamingTranscriptionClient
         {
             AppendQuery(query, "eot_threshold", FluxEndOfTurnThreshold);
             AppendQuery(query, "eager_eot_threshold", FluxEagerEndOfTurnThreshold);
+            AppendQuery(query, "eot_timeout_ms", vadSilenceThresholdMilliseconds.ToString(CultureInfo.InvariantCulture));
         }
         else
         {
             AppendQuery(query, "interim_results", "true");
+            AppendQuery(query, "endpointing", vadSilenceThresholdMilliseconds.ToString(CultureInfo.InvariantCulture));
             AppendQuery(query, "punctuate", "true");
             AppendQuery(query, "smart_format", "true");
         }

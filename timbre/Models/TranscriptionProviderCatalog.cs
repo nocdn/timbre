@@ -7,15 +7,65 @@ public enum TranscriptionLanguageMode
     AutoDetectCode,
 }
 
+public sealed class TranscriptionVadSilenceThresholdDefinition
+{
+    private const double FloatingPointNoiseTolerance = 0.000001;
+
+    public TranscriptionVadSilenceThresholdDefinition(
+        double defaultSeconds,
+        double minimumSeconds,
+        double maximumSeconds,
+        double stepSeconds)
+    {
+        DefaultSeconds = defaultSeconds;
+        MinimumSeconds = minimumSeconds;
+        MaximumSeconds = maximumSeconds;
+        StepSeconds = stepSeconds;
+    }
+
+    public double DefaultSeconds { get; }
+
+    public double MinimumSeconds { get; }
+
+    public double MaximumSeconds { get; }
+
+    public double StepSeconds { get; }
+
+    public double NormalizeSeconds(double? value)
+    {
+        if (!value.HasValue || double.IsNaN(value.Value) || double.IsInfinity(value.Value))
+        {
+            return DefaultSeconds;
+        }
+
+        var clampedValue = Math.Clamp(value.Value, MinimumSeconds, MaximumSeconds);
+        var cleanedValue = Math.Round(clampedValue, 3, MidpointRounding.AwayFromZero);
+        return Math.Abs(clampedValue - cleanedValue) <= FloatingPointNoiseTolerance
+            ? cleanedValue
+            : clampedValue;
+    }
+
+    public int NormalizeMilliseconds(double? value)
+    {
+        return (int)Math.Round(NormalizeSeconds(value) * 1000, MidpointRounding.AwayFromZero);
+    }
+}
+
 public sealed class TranscriptionModelDefinition
 {
-    public TranscriptionModelDefinition(string id, bool supportsStreaming, bool isDefault = false, params string[] aliases)
+    public TranscriptionModelDefinition(
+        string id,
+        bool supportsStreaming,
+        bool isDefault = false,
+        TranscriptionVadSilenceThresholdDefinition? vadSilenceThreshold = null,
+        params string[] aliases)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(id);
 
         Id = id.Trim();
         SupportsStreaming = supportsStreaming;
         IsDefault = isDefault;
+        VadSilenceThreshold = vadSilenceThreshold;
         Aliases = aliases
             .Where(alias => !string.IsNullOrWhiteSpace(alias))
             .Select(alias => alias.Trim())
@@ -28,6 +78,8 @@ public sealed class TranscriptionModelDefinition
     public bool SupportsStreaming { get; }
 
     public bool IsDefault { get; }
+
+    public TranscriptionVadSilenceThresholdDefinition? VadSilenceThreshold { get; }
 
     public IReadOnlyList<string> Aliases { get; }
 
@@ -163,6 +215,21 @@ public sealed class TranscriptionProviderDefinition
         return GetDefaultModel(streamingEnabled);
     }
 
+    public TranscriptionVadSilenceThresholdDefinition? GetVadSilenceThreshold(bool streamingEnabled)
+    {
+        return GetModels(streamingEnabled).FirstOrDefault(model => model.VadSilenceThreshold is not null)?.VadSilenceThreshold;
+    }
+
+    public bool SupportsVadSilenceThreshold(bool streamingEnabled)
+    {
+        return GetVadSilenceThreshold(streamingEnabled) is not null;
+    }
+
+    public double NormalizeVadSilenceThresholdSeconds(double? value, bool streamingEnabled)
+    {
+        return GetVadSilenceThreshold(streamingEnabled)?.NormalizeSeconds(value) ?? 0;
+    }
+
     public string NormalizeLanguage(string? language)
     {
         if (LanguageMode == TranscriptionLanguageMode.NotConfigurable)
@@ -204,7 +271,20 @@ public static class TranscriptionProviderCatalog
     public const string DefaultCohereModel = "cohere-transcribe-03-2026";
     public const string DefaultElevenLabsStreamingModel = "scribe_v2_realtime";
     public const string DefaultElevenLabsNonStreamingModel = "scribe_v2";
+    public const double DefaultDeepgramVadSilenceThresholdSeconds = 5.0;
     public const double DefaultElevenLabsVadSilenceThresholdSeconds = 0.6;
+
+    private static readonly TranscriptionVadSilenceThresholdDefinition DeepgramVadSilenceThreshold = new(
+        defaultSeconds: DefaultDeepgramVadSilenceThresholdSeconds,
+        minimumSeconds: 0.5,
+        maximumSeconds: 10.0,
+        stepSeconds: 0.1);
+
+    private static readonly TranscriptionVadSilenceThresholdDefinition ElevenLabsVadSilenceThreshold = new(
+        defaultSeconds: DefaultElevenLabsVadSilenceThresholdSeconds,
+        minimumSeconds: 0.3,
+        maximumSeconds: 3.0,
+        stepSeconds: 0.1);
 
     private static readonly TranscriptionProviderDefinition[] Definitions =
     [
@@ -232,8 +312,16 @@ public static class TranscriptionProviderCatalog
             TranscriptionProvider.Deepgram,
             "Deepgram",
             [
-                new(DefaultDeepgramStreamingModel, supportsStreaming: true, isDefault: true),
-                new(DefaultDeepgramNonStreamingModel, supportsStreaming: false, isDefault: true, aliases: new[] { "nova-3-general" }),
+                new(
+                    DefaultDeepgramStreamingModel,
+                    supportsStreaming: true,
+                    isDefault: true,
+                    vadSilenceThreshold: DeepgramVadSilenceThreshold),
+                new(
+                    DefaultDeepgramNonStreamingModel,
+                    supportsStreaming: false,
+                    isDefault: true,
+                    aliases: new[] { "nova-3-general" }),
             ],
             TranscriptionLanguageMode.NotConfigurable,
             defaultLanguage: "en",
@@ -260,7 +348,11 @@ public static class TranscriptionProviderCatalog
             TranscriptionProvider.ElevenLabs,
             "ElevenLabs",
             [
-                new(DefaultElevenLabsStreamingModel, supportsStreaming: true, isDefault: true),
+                new(
+                    DefaultElevenLabsStreamingModel,
+                    supportsStreaming: true,
+                    isDefault: true,
+                    vadSilenceThreshold: ElevenLabsVadSilenceThreshold),
                 new(DefaultElevenLabsNonStreamingModel, supportsStreaming: false, isDefault: true),
             ],
             TranscriptionLanguageMode.AutoDetectCode,
@@ -315,14 +407,43 @@ public static class TranscriptionProviderCatalog
         return Get(provider).NormalizeRequestLanguage(language);
     }
 
+    public static TranscriptionVadSilenceThresholdDefinition? GetVadSilenceThreshold(
+        TranscriptionProvider provider,
+        bool streamingEnabled)
+    {
+        return Get(provider).GetVadSilenceThreshold(streamingEnabled);
+    }
+
+    public static bool SupportsVadSilenceThreshold(TranscriptionProvider provider, bool streamingEnabled)
+    {
+        return Get(provider).SupportsVadSilenceThreshold(streamingEnabled);
+    }
+
+    public static double NormalizeVadSilenceThresholdSeconds(
+        TranscriptionProvider provider,
+        double? value,
+        bool streamingEnabled)
+    {
+        return Get(provider).NormalizeVadSilenceThresholdSeconds(value, streamingEnabled);
+    }
+
+    public static int NormalizeVadSilenceThresholdMilliseconds(
+        TranscriptionProvider provider,
+        double? value,
+        bool streamingEnabled)
+    {
+        var definition = GetVadSilenceThreshold(provider, streamingEnabled);
+        return definition?.NormalizeMilliseconds(value) ?? 0;
+    }
+
+    public static double NormalizeDeepgramVadSilenceThresholdSeconds(double? value)
+    {
+        return NormalizeVadSilenceThresholdSeconds(TranscriptionProvider.Deepgram, value, streamingEnabled: true);
+    }
+
     public static double NormalizeElevenLabsVadSilenceThresholdSeconds(double? value)
     {
-        if (!value.HasValue || double.IsNaN(value.Value) || double.IsInfinity(value.Value))
-        {
-            return DefaultElevenLabsVadSilenceThresholdSeconds;
-        }
-
-        return Math.Clamp(value.Value, 0.3, 3.0);
+        return NormalizeVadSilenceThresholdSeconds(TranscriptionProvider.ElevenLabs, value, streamingEnabled: true);
     }
 
     public static bool TryGetUploadLimitBytes(TranscriptionProvider provider, out long uploadLimitBytes)

@@ -42,6 +42,21 @@ public sealed class TextInsertionServiceTests
     }
 
     [Fact]
+    public async Task InsertTextAsync_WhenUnicodeTypingIsPreferred_SkipsDirectInsertion()
+    {
+        var directInserter = new FakeUiAutomationDirectTextInsertionService(
+            new DirectTextInsertionAttemptResult(true, "UIAValuePattern", "Inserted directly."));
+        var unicodeTyper = new FakeUnicodeTextTypingService();
+        var service = CreateService(directInserter, unicodeTyper);
+
+        await service.InsertTextAsync("streaming chunk", insertionMode: TextInsertionMode.PreferUnicodeTyping);
+
+        directInserter.AttemptCount.Should().Be(0);
+        unicodeTyper.CallCount.Should().Be(1);
+        unicodeTyper.LastTypedText.Should().Be("streaming chunk");
+    }
+
+    [Fact]
     public async Task InsertTextAsync_RejectsEmptyText()
     {
         var service = CreateService(

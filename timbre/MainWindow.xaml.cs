@@ -141,6 +141,9 @@ public sealed partial class MainWindow : Window
             DeepgramStreamingToggle.IsOn = _viewModel.DeepgramStreamingEnabled;
             DeepgramModelComboBox.ItemsSource = _viewModel.AvailableDeepgramModels;
             DeepgramModelComboBox.SelectedItem = _viewModel.SelectedDeepgramModel;
+            ApplyVadSilenceThresholdDefinition(DeepgramVadSilenceThresholdNumberBox, TranscriptionProvider.Deepgram);
+            DeepgramVadSilenceThresholdNumberBox.Value = _viewModel.DeepgramVadSilenceThresholdSeconds;
+            DeepgramVadSilenceThresholdPanel.Visibility = _viewModel.DeepgramVadSilenceThresholdVisibility;
             MistralApiKeyBox.Password = _viewModel.MistralApiKey;
             MistralStreamingToggle.IsOn = _viewModel.MistralStreamingEnabled;
             MistralModelComboBox.ItemsSource = _viewModel.AvailableMistralModels;
@@ -157,7 +160,9 @@ public sealed partial class MainWindow : Window
             ElevenLabsModelComboBox.ItemsSource = _viewModel.AvailableElevenLabsModels;
             ElevenLabsModelComboBox.SelectedItem = _viewModel.SelectedElevenLabsModel;
             ElevenLabsLanguageTextBox.Text = _viewModel.ElevenLabsLanguage;
+            ApplyVadSilenceThresholdDefinition(ElevenLabsVadSilenceThresholdNumberBox, TranscriptionProvider.ElevenLabs);
             ElevenLabsVadSilenceThresholdNumberBox.Value = _viewModel.ElevenLabsVadSilenceThresholdSeconds;
+            ElevenLabsVadSilenceThresholdPanel.Visibility = _viewModel.ElevenLabsVadSilenceThresholdVisibility;
             LlmPostProcessingSettingsPanel.Visibility = _viewModel.LlmPostProcessingSettingsVisibility;
             CerebrasLlmSettingsPanel.Visibility = _viewModel.CerebrasLlmSettingsVisibility;
             GroqLlmSettingsPanel.Visibility = _viewModel.GroqLlmSettingsVisibility;
@@ -345,11 +350,42 @@ public sealed partial class MainWindow : Window
 
     private void ElevenLabsVadSilenceThresholdNumberBox_ValueChanged(NumberBox sender, NumberBoxValueChangedEventArgs args)
     {
+        UpdateVadSilenceThreshold(
+            sender,
+            TranscriptionProvider.ElevenLabs,
+            value => _viewModel.ElevenLabsVadSilenceThresholdSeconds = value);
+    }
+
+    private void DeepgramVadSilenceThresholdNumberBox_ValueChanged(NumberBox sender, NumberBoxValueChangedEventArgs args)
+    {
+        UpdateVadSilenceThreshold(
+            sender,
+            TranscriptionProvider.Deepgram,
+            value => _viewModel.DeepgramVadSilenceThresholdSeconds = value);
+    }
+
+    private void UpdateVadSilenceThreshold(
+        NumberBox sender,
+        TranscriptionProvider provider,
+        Action<double> applyValue)
+    {
         if (_isApplyingViewModel || double.IsNaN(sender.Value))
         {
             return;
         }
 
+        var normalizedValue = TranscriptionProviderCatalog.NormalizeVadSilenceThresholdSeconds(
+            provider,
+            sender.Value,
+            streamingEnabled: true);
+
+        if (Math.Abs(sender.Value - normalizedValue) > 0.000000000001)
+        {
+            sender.Value = normalizedValue;
+            return;
+        }
+
+        applyValue(normalizedValue);
         QueueAutoSave();
     }
 
@@ -602,12 +638,26 @@ public sealed partial class MainWindow : Window
         _viewModel.SelectedFireworksModel = FireworksModelComboBox.SelectedItem as string ?? _viewModel.AvailableFireworksModels[0];
         _viewModel.FireworksLanguage = FireworksLanguageTextBox.Text;
         _viewModel.SelectedDeepgramModel = DeepgramModelComboBox.SelectedItem as string ?? _viewModel.AvailableDeepgramModels[0];
+        _viewModel.DeepgramVadSilenceThresholdSeconds = DeepgramVadSilenceThresholdNumberBox.Value;
         _viewModel.SelectedMistralModel = MistralModelComboBox.SelectedItem as string ?? _viewModel.AvailableMistralModels[0];
         _viewModel.SelectedCohereModel = CohereModelComboBox.SelectedItem as string ?? _viewModel.AvailableCohereModels[0];
         _viewModel.CohereLanguage = CohereLanguageTextBox.Text;
         _viewModel.SelectedElevenLabsModel = ElevenLabsModelComboBox.SelectedItem as string ?? _viewModel.AvailableElevenLabsModels[0];
         _viewModel.ElevenLabsLanguage = ElevenLabsLanguageTextBox.Text;
         _viewModel.ElevenLabsVadSilenceThresholdSeconds = ElevenLabsVadSilenceThresholdNumberBox.Value;
+    }
+
+    private static void ApplyVadSilenceThresholdDefinition(NumberBox numberBox, TranscriptionProvider provider)
+    {
+        var definition = TranscriptionProviderCatalog.GetVadSilenceThreshold(provider, streamingEnabled: true);
+        if (definition is null)
+        {
+            return;
+        }
+
+        numberBox.Minimum = definition.MinimumSeconds;
+        numberBox.Maximum = definition.MaximumSeconds;
+        numberBox.SmallChange = definition.StepSeconds;
     }
 
     private LlmPostProcessingProvider GetSelectedLlmPostProcessingProviderFromControls()

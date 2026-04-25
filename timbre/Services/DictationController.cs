@@ -33,6 +33,7 @@ public sealed class DictationController : IDictationController
     private Task _streamingSendChain = Task.CompletedTask;
     private bool _isTranscribing;
     private string? _lastTranscript;
+    private int _streamingPastedChunkCount;
 
     public DictationController(
         IAppSettingsStore settingsStore,
@@ -107,6 +108,7 @@ public sealed class DictationController : IDictationController
                     transcriptionCancellationTokenSource = new CancellationTokenSource();
                     ResetStreamingFailure();
                     ResetStreamingSendChain();
+                    ResetStreamingPasteCount();
                     streamingSession = await CreateRealtimeStreamingSessionAsync(settings, transcriptionCancellationTokenSource.Token);
                     recorder.ChunkAvailable += OnRecorderChunkAvailable;
                     _activeStreamingSession = streamingSession;
@@ -508,6 +510,7 @@ public sealed class DictationController : IDictationController
                 GetApiKey(settings),
                 GetModel(settings),
                 GetLanguage(settings),
+                settings.DeepgramVadSilenceThresholdSeconds,
                 AppendStreamingTranscriptChunkAsync,
                 cancellationToken),
             TranscriptionProvider.Mistral => await _mistralRealtimeClient.ConnectAsync(
@@ -580,12 +583,18 @@ public sealed class DictationController : IDictationController
             return;
         }
 
-        DiagnosticsLogger.Info($"Inserting realtime transcript chunk. TextLength={text.Length}, Preview='{CreateTranscriptPreview(text)}'.");
         await _streamingPasteLock.WaitAsync(cancellationToken);
 
         try
         {
-            await _textInsertionService.InsertTextAsync(text, cancellationToken: cancellationToken);
+            var chunkIndex = ++_streamingPastedChunkCount;
+            var provider = _settingsStore.CurrentSettings.Provider;
+            DiagnosticsLogger.Info($"Inserting realtime transcript chunk. Provider={provider}, ChunkIndex={chunkIndex}, TextLength={text.Length}, Preview='{CreateTranscriptPreview(text)}'.");
+            await _textInsertionService.InsertTextAsync(
+                text,
+                insertionMode: TextInsertionMode.PreferUnicodeTyping,
+                cancellationToken: cancellationToken);
+            DiagnosticsLogger.Info($"Realtime transcript chunk inserted. Provider={provider}, ChunkIndex={chunkIndex}, TextLength={text.Length}.");
         }
         finally
         {
@@ -690,6 +699,11 @@ public sealed class DictationController : IDictationController
         {
             _streamingFailure = null;
         }
+    }
+
+    private void ResetStreamingPasteCount()
+    {
+        _streamingPastedChunkCount = 0;
     }
 
     private void PublishStatus(DictationState state, string message, bool canCancel)
