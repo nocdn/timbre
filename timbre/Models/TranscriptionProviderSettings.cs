@@ -57,7 +57,6 @@ public static class TranscriptionProviderSettingsAccessor
     {
         return provider switch
         {
-            TranscriptionProvider.Fireworks => settings.FireworksApiKey,
             TranscriptionProvider.Deepgram => settings.DeepgramApiKey,
             TranscriptionProvider.Mistral => settings.MistralApiKey,
             TranscriptionProvider.Cohere => settings.CohereApiKey,
@@ -70,7 +69,6 @@ public static class TranscriptionProviderSettingsAccessor
     {
         return provider switch
         {
-            TranscriptionProvider.Fireworks => settings.FireworksModel,
             TranscriptionProvider.Deepgram => settings.DeepgramModel,
             TranscriptionProvider.Mistral => settings.MistralModel,
             TranscriptionProvider.Cohere => settings.CohereModel,
@@ -83,7 +81,6 @@ public static class TranscriptionProviderSettingsAccessor
     {
         return provider switch
         {
-            TranscriptionProvider.Fireworks => settings.FireworksLanguage,
             TranscriptionProvider.Deepgram => settings.DeepgramLanguage,
             TranscriptionProvider.Mistral => null,
             TranscriptionProvider.Cohere => settings.CohereLanguage,

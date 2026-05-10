@@ -91,13 +91,6 @@ public sealed class RealTranscriptionSmokeTests
             httpClient => new GroqTranscriptionClient(httpClient));
 
         yield return new ConfiguredProvider(
-            TranscriptionProvider.Fireworks,
-            configuration.GetSecret("FIREWORKS_API_KEY"),
-            TranscriptionModelCatalog.DefaultFireworksModel,
-            null,
-            httpClient => new FireworksTranscriptionClient(httpClient));
-
-        yield return new ConfiguredProvider(
             TranscriptionProvider.Deepgram,
             configuration.GetSecret("DEEPGRAM_API_KEY"),
             TranscriptionModelCatalog.DefaultDeepgramNonStreamingModel,

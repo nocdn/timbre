@@ -25,7 +25,6 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private string _groqApiKey = string.Empty;
     private string _cerebrasApiKey = string.Empty;
     private string _llmGroqApiKey = string.Empty;
-    private string _fireworksApiKey = string.Empty;
     private string _deepgramApiKey = string.Empty;
     private string _mistralApiKey = string.Empty;
     private string _cohereApiKey = string.Empty;
@@ -42,9 +41,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private string _selectedCerebrasModel = LlmPostProcessingCatalog.DefaultCerebrasModel;
     private string _selectedLlmGroqModel = LlmPostProcessingCatalog.DefaultGroqModel;
     private string _selectedGroqModel = TranscriptionProviderCatalog.DefaultGroqModel;
-    private string _selectedFireworksModel = TranscriptionProviderCatalog.DefaultFireworksModel;
     private string _groqLanguage = TranscriptionProviderCatalog.Get(TranscriptionProvider.Groq).DefaultLanguage;
-    private string _fireworksLanguage = TranscriptionProviderCatalog.Get(TranscriptionProvider.Fireworks).DefaultLanguage;
     private string _selectedDeepgramModel = TranscriptionProviderCatalog.DefaultDeepgramStreamingModel;
     private double _deepgramVadSilenceThresholdSeconds = TranscriptionProviderCatalog.DefaultDeepgramVadSilenceThresholdSeconds;
     private string _selectedMistralModel = TranscriptionProviderCatalog.DefaultMistralNonStreamingModel;
@@ -107,8 +104,6 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
     public IReadOnlyList<string> AvailableGroqModels => TranscriptionProviderCatalog.GetModelIds(TranscriptionProvider.Groq);
 
-    public IReadOnlyList<string> AvailableFireworksModels => TranscriptionProviderCatalog.GetModelIds(TranscriptionProvider.Fireworks);
-
     public IReadOnlyList<string> AvailableDeepgramModels => TranscriptionProviderCatalog.GetModelIds(TranscriptionProvider.Deepgram, DeepgramStreamingEnabled);
 
     public IReadOnlyList<string> AvailableMistralModels => TranscriptionProviderCatalog.GetModelIds(TranscriptionProvider.Mistral, MistralStreamingEnabled);
@@ -164,13 +159,11 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             if (SetProperty(ref _selectedProvider, value))
             {
                 OnPropertyChanged(nameof(IsGroqSelected));
-                OnPropertyChanged(nameof(IsFireworksSelected));
                 OnPropertyChanged(nameof(IsDeepgramSelected));
                 OnPropertyChanged(nameof(IsMistralSelected));
                 OnPropertyChanged(nameof(IsCohereSelected));
                 OnPropertyChanged(nameof(IsElevenLabsSelected));
                 OnPropertyChanged(nameof(GroqSettingsVisibility));
-                OnPropertyChanged(nameof(FireworksSettingsVisibility));
                 OnPropertyChanged(nameof(DeepgramSettingsVisibility));
                 OnPropertyChanged(nameof(MistralSettingsVisibility));
                 OnPropertyChanged(nameof(CohereSettingsVisibility));
@@ -181,8 +174,6 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
     public bool IsGroqSelected => SelectedProvider == TranscriptionProvider.Groq;
 
-    public bool IsFireworksSelected => SelectedProvider == TranscriptionProvider.Fireworks;
-
     public bool IsDeepgramSelected => SelectedProvider == TranscriptionProvider.Deepgram;
 
     public bool IsMistralSelected => SelectedProvider == TranscriptionProvider.Mistral;
@@ -192,8 +183,6 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     public bool IsElevenLabsSelected => SelectedProvider == TranscriptionProvider.ElevenLabs;
 
     public Visibility GroqSettingsVisibility => IsGroqSelected ? Visibility.Visible : Visibility.Collapsed;
-
-    public Visibility FireworksSettingsVisibility => IsFireworksSelected ? Visibility.Visible : Visibility.Collapsed;
 
     public Visibility DeepgramSettingsVisibility => IsDeepgramSelected ? Visibility.Visible : Visibility.Collapsed;
 
@@ -225,12 +214,6 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     {
         get => _llmGroqApiKey;
         set => SetProperty(ref _llmGroqApiKey, value);
-    }
-
-    public string FireworksApiKey
-    {
-        get => _fireworksApiKey;
-        set => SetProperty(ref _fireworksApiKey, value);
     }
 
     public string DeepgramApiKey
@@ -374,18 +357,6 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     {
         get => _groqLanguage;
         set => SetProperty(ref _groqLanguage, value);
-    }
-
-    public string SelectedFireworksModel
-    {
-        get => _selectedFireworksModel;
-        set => SetProperty(ref _selectedFireworksModel, value);
-    }
-
-    public string FireworksLanguage
-    {
-        get => _fireworksLanguage;
-        set => SetProperty(ref _fireworksLanguage, value);
     }
 
     public string SelectedDeepgramModel
@@ -715,7 +686,6 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private void ApplySettings(AppSettings settings)
     {
         var groqSettings = settings.GetTranscriptionProviderSettings(TranscriptionProvider.Groq);
-        var fireworksSettings = settings.GetTranscriptionProviderSettings(TranscriptionProvider.Fireworks);
         var deepgramSettings = settings.GetTranscriptionProviderSettings(TranscriptionProvider.Deepgram);
         var mistralSettings = settings.GetTranscriptionProviderSettings(TranscriptionProvider.Mistral);
         var cohereSettings = settings.GetTranscriptionProviderSettings(TranscriptionProvider.Cohere);
@@ -727,7 +697,6 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         GroqApiKey = groqSettings.ApiKey;
         CerebrasApiKey = settings.CerebrasApiKey ?? string.Empty;
         LlmGroqApiKey = settings.LlmGroqApiKey ?? string.Empty;
-        FireworksApiKey = fireworksSettings.ApiKey;
         DeepgramApiKey = deepgramSettings.ApiKey;
         MistralApiKey = mistralSettings.ApiKey;
         CohereApiKey = cohereSettings.ApiKey;
@@ -754,8 +723,6 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         SelectedLlmGroqModel = SelectPreferredModel(AvailableLlmGroqModels, settings.LlmGroqModel, LlmPostProcessingCatalog.DefaultGroqModel);
         SelectedGroqModel = groqSettings.Model;
         GroqLanguage = groqSettings.Language;
-        SelectedFireworksModel = fireworksSettings.Model;
-        FireworksLanguage = fireworksSettings.Language;
         SelectedDeepgramModel = deepgramSettings.Model;
         DeepgramVadSilenceThresholdSeconds = deepgramSettings.VadSilenceThresholdSeconds;
         SelectedMistralModel = mistralSettings.Model;
@@ -784,7 +751,6 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             GroqApiKey = GroqApiKey.Trim(),
             CerebrasApiKey = CerebrasApiKey.Trim(),
             LlmGroqApiKey = LlmGroqApiKey.Trim(),
-            FireworksApiKey = FireworksApiKey.Trim(),
             DeepgramApiKey = DeepgramApiKey.Trim(),
             MistralApiKey = MistralApiKey.Trim(),
             CohereApiKey = CohereApiKey.Trim(),
@@ -805,8 +771,6 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             LlmGroqModel = string.IsNullOrWhiteSpace(SelectedLlmGroqModel) ? AvailableLlmGroqModels[0] : SelectedLlmGroqModel,
             GroqModel = SelectedGroqModel,
             GroqLanguage = GroqLanguage,
-            FireworksModel = SelectedFireworksModel,
-            FireworksLanguage = FireworksLanguage,
             DeepgramModel = SelectedDeepgramModel,
             DeepgramLanguage = string.Empty,
             DeepgramStreamingEnabled = DeepgramStreamingEnabled,

@@ -263,7 +263,6 @@ public sealed class TranscriptionProviderDefinition
 public static class TranscriptionProviderCatalog
 {
     public const string DefaultGroqModel = "whisper-large-v3-turbo";
-    public const string DefaultFireworksModel = "whisper-v3-turbo";
     public const string DefaultDeepgramStreamingModel = "flux";
     public const string DefaultDeepgramNonStreamingModel = "nova-3";
     public const string DefaultMistralStreamingModel = "voxtral-mini-transcribe-realtime-2602";
@@ -298,16 +297,6 @@ public static class TranscriptionProviderCatalog
             TranscriptionLanguageMode.AutoDetectCode,
             defaultLanguage: "auto",
             uploadLimitBytes: 25L * 1024 * 1024),
-        new(
-            TranscriptionProvider.Fireworks,
-            "Fireworks",
-            [
-                new(DefaultFireworksModel, supportsStreaming: false, isDefault: true),
-                new("whisper-v3", supportsStreaming: false),
-            ],
-            TranscriptionLanguageMode.AutoDetectCode,
-            defaultLanguage: "auto",
-            uploadLimitBytes: 1024L * 1024 * 1024),
         new(
             TranscriptionProvider.Deepgram,
             "Deepgram",

@@ -64,14 +64,6 @@ public static class Program
             };
             return new GroqTranscriptionClient(httpClient);
         });
-        services.AddSingleton<FireworksTranscriptionClient>(_ =>
-        {
-            var httpClient = new HttpClient
-            {
-                Timeout = TimeSpan.FromMinutes(2),
-            };
-            return new FireworksTranscriptionClient(httpClient);
-        });
         services.AddSingleton<DeepgramTranscriptionClient>(_ =>
         {
             var httpClient = new HttpClient

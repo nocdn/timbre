@@ -16,8 +16,6 @@ public sealed class AppSettings
 
     public string? LlmGroqApiKey { get; init; }
 
-    public string? FireworksApiKey { get; init; }
-
     public string? DeepgramApiKey { get; init; }
 
     public string? MistralApiKey { get; init; }
@@ -53,10 +51,6 @@ public sealed class AppSettings
     public string GroqModel { get; init; } = TranscriptionProviderCatalog.DefaultGroqModel;
 
     public string GroqLanguage { get; init; } = TranscriptionProviderCatalog.Get(TranscriptionProvider.Groq).DefaultLanguage;
-
-    public string FireworksModel { get; init; } = TranscriptionProviderCatalog.DefaultFireworksModel;
-
-    public string FireworksLanguage { get; init; } = TranscriptionProviderCatalog.Get(TranscriptionProvider.Fireworks).DefaultLanguage;
 
     public string DeepgramModel { get; init; } = TranscriptionProviderCatalog.DefaultDeepgramStreamingModel;
 

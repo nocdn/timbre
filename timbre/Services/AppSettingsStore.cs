@@ -114,7 +114,6 @@ public sealed class AppSettingsStore : IAppSettingsStore
     internal static AppSettings NormalizeSettings(AppSettings settings)
     {
         var groq = settings.GetTranscriptionProviderSettings(TranscriptionProvider.Groq);
-        var fireworks = settings.GetTranscriptionProviderSettings(TranscriptionProvider.Fireworks);
         var deepgram = settings.GetTranscriptionProviderSettings(TranscriptionProvider.Deepgram);
         var mistral = settings.GetTranscriptionProviderSettings(TranscriptionProvider.Mistral);
         var cohere = settings.GetTranscriptionProviderSettings(TranscriptionProvider.Cohere);
@@ -129,7 +128,6 @@ public sealed class AppSettingsStore : IAppSettingsStore
             GroqApiKey = NormalizeOptionalSecret(groq.ApiKey),
             CerebrasApiKey = NormalizeOptionalSecret(settings.CerebrasApiKey),
             LlmGroqApiKey = NormalizeOptionalSecret(settings.LlmGroqApiKey),
-            FireworksApiKey = NormalizeOptionalSecret(fireworks.ApiKey),
             DeepgramApiKey = NormalizeOptionalSecret(deepgram.ApiKey),
             MistralApiKey = NormalizeOptionalSecret(mistral.ApiKey),
             CohereApiKey = NormalizeOptionalSecret(cohere.ApiKey),
@@ -148,8 +146,6 @@ public sealed class AppSettingsStore : IAppSettingsStore
             LlmGroqModel = NormalizeModelName(settings.LlmGroqModel, LlmPostProcessingCatalog.DefaultGroqModel),
             GroqModel = groq.Model,
             GroqLanguage = groq.Language,
-            FireworksModel = fireworks.Model,
-            FireworksLanguage = fireworks.Language,
             DeepgramModel = deepgram.Model,
             DeepgramLanguage = deepgram.Language,
             DeepgramStreamingEnabled = deepgram.StreamingEnabled,
@@ -186,7 +182,6 @@ public sealed class AppSettingsStore : IAppSettingsStore
             GroqApiKey = Decrypt(storedSettings.EncryptedGroqApiKey),
             CerebrasApiKey = Decrypt(storedSettings.EncryptedCerebrasApiKey),
             LlmGroqApiKey = Decrypt(storedSettings.EncryptedLlmGroqApiKey),
-            FireworksApiKey = Decrypt(storedSettings.EncryptedFireworksApiKey),
             DeepgramApiKey = Decrypt(storedSettings.EncryptedDeepgramApiKey),
             MistralApiKey = Decrypt(storedSettings.EncryptedMistralApiKey),
             CohereApiKey = Decrypt(storedSettings.EncryptedCohereApiKey),
@@ -205,8 +200,6 @@ public sealed class AppSettingsStore : IAppSettingsStore
             LlmGroqModel = storedSettings.LlmGroqModel ?? string.Empty,
             GroqModel = storedSettings.GroqModel ?? string.Empty,
             GroqLanguage = storedSettings.GroqLanguage ?? string.Empty,
-            FireworksModel = storedSettings.FireworksModel ?? string.Empty,
-            FireworksLanguage = storedSettings.FireworksLanguage ?? string.Empty,
             DeepgramModel = storedSettings.DeepgramModel ?? string.Empty,
             DeepgramLanguage = storedSettings.DeepgramLanguage ?? string.Empty,
             DeepgramStreamingEnabled = deepgramStreamingEnabled,
@@ -237,7 +230,6 @@ public sealed class AppSettingsStore : IAppSettingsStore
             EncryptedGroqApiKey = Encrypt(settings.GroqApiKey),
             EncryptedCerebrasApiKey = Encrypt(settings.CerebrasApiKey),
             EncryptedLlmGroqApiKey = Encrypt(settings.LlmGroqApiKey),
-            EncryptedFireworksApiKey = Encrypt(settings.FireworksApiKey),
             EncryptedDeepgramApiKey = Encrypt(settings.DeepgramApiKey),
             EncryptedMistralApiKey = Encrypt(settings.MistralApiKey),
             EncryptedCohereApiKey = Encrypt(settings.CohereApiKey),
@@ -256,8 +248,6 @@ public sealed class AppSettingsStore : IAppSettingsStore
             LlmGroqModel = settings.LlmGroqModel,
             GroqModel = settings.GroqModel,
             GroqLanguage = settings.GroqLanguage,
-            FireworksModel = settings.FireworksModel,
-            FireworksLanguage = settings.FireworksLanguage,
             DeepgramModel = settings.DeepgramModel,
             DeepgramLanguage = settings.DeepgramLanguage,
             DeepgramStreamingEnabled = settings.DeepgramStreamingEnabled,
@@ -406,8 +396,6 @@ public sealed class AppSettingsStore : IAppSettingsStore
 
         public string? EncryptedLlmGroqApiKey { get; set; }
 
-        public string? EncryptedFireworksApiKey { get; set; }
-
         public string? EncryptedDeepgramApiKey { get; set; }
 
         public string? EncryptedMistralApiKey { get; set; }
@@ -449,10 +437,6 @@ public sealed class AppSettingsStore : IAppSettingsStore
         public string? GroqModel { get; set; }
 
         public string? GroqLanguage { get; set; }
-
-        public string? FireworksModel { get; set; }
-
-        public string? FireworksLanguage { get; set; }
 
         public string? DeepgramModel { get; set; }
 

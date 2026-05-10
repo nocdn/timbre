@@ -135,11 +135,6 @@
                                     Content="Groq"
                                     GroupName="ProviderGroup" />
                                 <RadioButton
-                                    x:Name="FireworksProviderRadioButton"
-                                    Checked="ProviderRadioButton_Checked"
-                                    Content="Fireworks"
-                                    GroupName="ProviderGroup" />
-                                <RadioButton
                                     x:Name="DeepgramProviderRadioButton"
                                     Checked="ProviderRadioButton_Checked"
                                     Content="Deepgram"
@@ -185,40 +180,6 @@
                         <StackPanel Spacing="6">
                             <TextBox
                                 x:Name="GroqLanguageTextBox"
-                                Width="160"
-                                HorizontalAlignment="Left"
-                                Header="Language"
-                                TextChanged="SettingsTextBox_TextChanged"
-                                PlaceholderText="auto" />
-                            <TextBlock
-                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                Text="Use ISO-639-1 or ISO-639-3 code.&#x0a;Setting 'auto', the provider will detect it.&#x0a;If left blank, defaults to 'auto'"
-                                TextWrapping="WrapWholeWords" />
-                        </StackPanel>
-                    </StackPanel>
-                </StackPanel>
-
-                <StackPanel
-                    x:Name="FireworksSettingsPanel"
-                    Spacing="14">
-                    <TextBlock
-                        Text="Fireworks settings"
-                        Style="{ThemeResource SubtitleTextBlockStyle}" />
-                    <StackPanel Spacing="14">
-                        <PasswordBox
-                            x:Name="FireworksApiKeyBox"
-                            PasswordChanged="SettingsPasswordBox_PasswordChanged"
-                            Header="Fireworks API key" />
-
-                        <ComboBox
-                            x:Name="FireworksModelComboBox"
-                            SelectionChanged="SettingsComboBox_SelectionChanged"
-                            Header="Fireworks model"
-                            PlaceholderText="Select a Fireworks model" />
-
-                        <StackPanel Spacing="6">
-                            <TextBox
-                                x:Name="FireworksLanguageTextBox"
                                 Width="160"
                                 HorizontalAlignment="Left"
                                 Header="Language"

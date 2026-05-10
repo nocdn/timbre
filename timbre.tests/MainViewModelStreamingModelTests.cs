@@ -105,7 +105,6 @@ public sealed class MainViewModelStreamingModelTests
         var settingsStore = new FakeAppSettingsStore();
         var viewModel = CreateViewModel(settingsStore);
         viewModel.GroqLanguage = "";
-        viewModel.FireworksLanguage = "";
         viewModel.ElevenLabsLanguage = "";
         viewModel.CohereLanguage = "";
 
@@ -115,7 +114,6 @@ public sealed class MainViewModelStreamingModelTests
         // Assert
         saved.Should().BeTrue();
         settingsStore.CurrentSettings.GroqLanguage.Should().Be("auto");
-        settingsStore.CurrentSettings.FireworksLanguage.Should().Be("auto");
         settingsStore.CurrentSettings.ElevenLabsLanguage.Should().Be("auto");
         settingsStore.CurrentSettings.CohereLanguage.Should().Be("en");
     }

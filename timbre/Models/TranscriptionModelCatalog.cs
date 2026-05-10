@@ -3,7 +3,6 @@ namespace timbre.Models;
 public static class TranscriptionModelCatalog
 {
     public static string DefaultGroqModel => TranscriptionProviderCatalog.DefaultGroqModel;
-    public static string DefaultFireworksModel => TranscriptionProviderCatalog.DefaultFireworksModel;
     public static string DefaultDeepgramStreamingModel => TranscriptionProviderCatalog.DefaultDeepgramStreamingModel;
     public static string DefaultDeepgramNonStreamingModel => TranscriptionProviderCatalog.DefaultDeepgramNonStreamingModel;
     public static string DefaultMistralStreamingModel => TranscriptionProviderCatalog.DefaultMistralStreamingModel;
@@ -13,8 +12,6 @@ public static class TranscriptionModelCatalog
     public static string DefaultElevenLabsNonStreamingModel => TranscriptionProviderCatalog.DefaultElevenLabsNonStreamingModel;
 
     public static IReadOnlyList<string> GroqModels => TranscriptionProviderCatalog.GetModelIds(TranscriptionProvider.Groq);
-
-    public static IReadOnlyList<string> FireworksModels => TranscriptionProviderCatalog.GetModelIds(TranscriptionProvider.Fireworks);
 
     public static IReadOnlyList<string> DeepgramStreamingModels => TranscriptionProviderCatalog.GetModelIds(TranscriptionProvider.Deepgram, streamingEnabled: true);
 

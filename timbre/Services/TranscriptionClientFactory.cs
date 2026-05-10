@@ -6,7 +6,6 @@ namespace timbre.Services;
 public sealed class TranscriptionClientFactory : ITranscriptionClientFactory
 {
     private readonly GroqTranscriptionClient _groqClient;
-    private readonly FireworksTranscriptionClient _fireworksClient;
     private readonly DeepgramTranscriptionClient _deepgramClient;
     private readonly MistralTranscriptionClient _mistralClient;
     private readonly CohereTranscriptionClient _cohereClient;
@@ -14,14 +13,12 @@ public sealed class TranscriptionClientFactory : ITranscriptionClientFactory
 
     public TranscriptionClientFactory(
         GroqTranscriptionClient groqClient,
-        FireworksTranscriptionClient fireworksClient,
         DeepgramTranscriptionClient deepgramClient,
         MistralTranscriptionClient mistralClient,
         CohereTranscriptionClient cohereClient,
         ElevenLabsTranscriptionClient elevenLabsClient)
     {
         _groqClient = groqClient;
-        _fireworksClient = fireworksClient;
         _deepgramClient = deepgramClient;
         _mistralClient = mistralClient;
         _cohereClient = cohereClient;
@@ -32,7 +29,6 @@ public sealed class TranscriptionClientFactory : ITranscriptionClientFactory
     {
         return provider switch
         {
-            TranscriptionProvider.Fireworks => _fireworksClient,
             TranscriptionProvider.Deepgram => _deepgramClient,
             TranscriptionProvider.Mistral => _mistralClient,
             TranscriptionProvider.Cohere => _cohereClient,

@@ -56,7 +56,6 @@ public sealed class TranscriptionProviderCatalogTests
     {
         // Assert
         TranscriptionProviderCatalog.NormalizeLanguage(TranscriptionProvider.Groq, null).Should().Be("auto");
-        TranscriptionProviderCatalog.NormalizeLanguage(TranscriptionProvider.Fireworks, "AUTO").Should().Be("auto");
         TranscriptionProviderCatalog.NormalizeLanguage(TranscriptionProvider.ElevenLabs, " ENG ").Should().Be("eng");
         TranscriptionProviderCatalog.NormalizeLanguage(TranscriptionProvider.Cohere, "auto").Should().Be("en");
         TranscriptionProviderCatalog.NormalizeLanguage(TranscriptionProvider.Deepgram, "fr").Should().Be("en");

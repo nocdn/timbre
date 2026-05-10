@@ -107,7 +107,6 @@ public sealed partial class MainWindow : Window
             InputDeviceComboBox.ItemsSource = _viewModel.InputDevices;
             InputDeviceComboBox.SelectedItem = _viewModel.SelectedInputDevice;
             GroqProviderRadioButton.IsChecked = _viewModel.IsGroqSelected;
-            FireworksProviderRadioButton.IsChecked = _viewModel.IsFireworksSelected;
             DeepgramProviderRadioButton.IsChecked = _viewModel.IsDeepgramSelected;
             MistralProviderRadioButton.IsChecked = _viewModel.IsMistralSelected;
             CohereProviderRadioButton.IsChecked = _viewModel.IsCohereSelected;
@@ -133,10 +132,6 @@ public sealed partial class MainWindow : Window
             GroqModelComboBox.ItemsSource = _viewModel.AvailableGroqModels;
             GroqModelComboBox.SelectedItem = _viewModel.SelectedGroqModel;
             GroqLanguageTextBox.Text = _viewModel.GroqLanguage;
-            FireworksApiKeyBox.Password = _viewModel.FireworksApiKey;
-            FireworksModelComboBox.ItemsSource = _viewModel.AvailableFireworksModels;
-            FireworksModelComboBox.SelectedItem = _viewModel.SelectedFireworksModel;
-            FireworksLanguageTextBox.Text = _viewModel.FireworksLanguage;
             DeepgramApiKeyBox.Password = _viewModel.DeepgramApiKey;
             DeepgramStreamingToggle.IsOn = _viewModel.DeepgramStreamingEnabled;
             DeepgramModelComboBox.ItemsSource = _viewModel.AvailableDeepgramModels;
@@ -167,7 +162,6 @@ public sealed partial class MainWindow : Window
             CerebrasLlmSettingsPanel.Visibility = _viewModel.CerebrasLlmSettingsVisibility;
             GroqLlmSettingsPanel.Visibility = _viewModel.GroqLlmSettingsVisibility;
             GroqSettingsPanel.Visibility = _viewModel.GroqSettingsVisibility;
-            FireworksSettingsPanel.Visibility = _viewModel.FireworksSettingsVisibility;
             DeepgramSettingsPanel.Visibility = _viewModel.DeepgramSettingsVisibility;
             MistralSettingsPanel.Visibility = _viewModel.MistralSettingsVisibility;
             CohereSettingsPanel.Visibility = _viewModel.CohereSettingsVisibility;
@@ -616,7 +610,6 @@ public sealed partial class MainWindow : Window
         _viewModel.GroqApiKey = GroqApiKeyBox.Password;
         _viewModel.CerebrasApiKey = CerebrasApiKeyBox.Password;
         _viewModel.LlmGroqApiKey = LlmGroqApiKeyBox.Password;
-        _viewModel.FireworksApiKey = FireworksApiKeyBox.Password;
         _viewModel.DeepgramApiKey = DeepgramApiKeyBox.Password;
         _viewModel.MistralApiKey = MistralApiKeyBox.Password;
         _viewModel.CohereApiKey = CohereApiKeyBox.Password;
@@ -635,8 +628,6 @@ public sealed partial class MainWindow : Window
         _viewModel.SelectedLlmGroqModel = LlmGroqModelComboBox.SelectedItem as string ?? _viewModel.AvailableLlmGroqModels[0];
         _viewModel.SelectedGroqModel = GroqModelComboBox.SelectedItem as string ?? _viewModel.AvailableGroqModels[0];
         _viewModel.GroqLanguage = GroqLanguageTextBox.Text;
-        _viewModel.SelectedFireworksModel = FireworksModelComboBox.SelectedItem as string ?? _viewModel.AvailableFireworksModels[0];
-        _viewModel.FireworksLanguage = FireworksLanguageTextBox.Text;
         _viewModel.SelectedDeepgramModel = DeepgramModelComboBox.SelectedItem as string ?? _viewModel.AvailableDeepgramModels[0];
         _viewModel.DeepgramVadSilenceThresholdSeconds = DeepgramVadSilenceThresholdNumberBox.Value;
         _viewModel.SelectedMistralModel = MistralModelComboBox.SelectedItem as string ?? _viewModel.AvailableMistralModels[0];
@@ -687,11 +678,6 @@ public sealed partial class MainWindow : Window
         if (DeepgramProviderRadioButton.IsChecked == true)
         {
             return TranscriptionProvider.Deepgram;
-        }
-
-        if (FireworksProviderRadioButton.IsChecked == true)
-        {
-            return TranscriptionProvider.Fireworks;
         }
 
         return TranscriptionProvider.Groq;
