@@ -33,59 +33,22 @@ public sealed class MistralRealtimeTranscriptionClient
 
         var resolvedModel = TranscriptionProviderCatalog.NormalizeModel(TranscriptionProvider.Mistral, model, streamingEnabled: true);
         var endpoint = BuildEndpoint(resolvedModel);
-        var webSocket = new ClientWebSocket();
-        webSocket.Options.KeepAliveInterval = TimeSpan.FromSeconds(10);
-        webSocket.Options.SetRequestHeader("Authorization", $"Bearer {apiKey.Trim()}");
-        MistralRealtimeSession? session = null;
-
-        try
-        {
-            DiagnosticsLogger.Info(
-                $"Mistral realtime connection starting. Endpoint={endpoint}, Model={resolvedModel}, TargetDelayMs={targetStreamingDelayMs}, AudioEncoding={AudioEncoding}, SampleRate={SampleRate}.");
-
-            await webSocket.ConnectAsync(endpoint, cancellationToken);
-
-            session = new MistralRealtimeSession(webSocket, targetStreamingDelayMs, transcriptChunkHandler);
-            await session.InitializeAsync(cancellationToken);
-            DiagnosticsLogger.Info(
-                $"Mistral realtime connection established. Endpoint={endpoint}, Model={resolvedModel}, TargetDelayMs={targetStreamingDelayMs}.");
-            return session;
-        }
-        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
-        {
-            if (session is not null)
-            {
-                await session.DisposeAsync();
-            }
-            else
-            {
-                webSocket.Dispose();
-            }
-
-            throw new TranscriptionException("Connecting to Mistral timed out.", true);
-        }
-        catch (Exception exception)
-        {
-            if (session is not null)
-            {
-                await session.DisposeAsync();
-            }
-            else
-            {
-                webSocket.Dispose();
-            }
-
-            throw exception as TranscriptionException
-                ?? new TranscriptionException($"The Mistral realtime connection failed: {exception.Message}", true, null, exception);
-        }
+        return await RealtimeWebSocketConnector.ConnectAsync(
+            endpoint,
+            webSocket => webSocket.Options.SetRequestHeader("Authorization", $"Bearer {apiKey.Trim()}"),
+            webSocket => new MistralRealtimeSession(webSocket, targetStreamingDelayMs, transcriptChunkHandler),
+            (session, token) => session.InitializeAsync(token),
+            "Connecting to Mistral timed out.",
+            "The Mistral realtime connection failed",
+            () => $"Mistral realtime connection starting. Endpoint={endpoint}, Model={resolvedModel}, TargetDelayMs={targetStreamingDelayMs}, AudioEncoding={AudioEncoding}, SampleRate={SampleRate}.",
+            () => $"Mistral realtime connection established. Endpoint={endpoint}, Model={resolvedModel}, TargetDelayMs={targetStreamingDelayMs}.",
+            logFailure: null,
+            cancellationToken);
     }
 
     private static Uri BuildEndpoint(string model)
     {
-        return new UriBuilder(Endpoint)
-        {
-            Query = $"model={Uri.EscapeDataString(model)}",
-        }.Uri;
+        return UriQuery.Build(Endpoint, ("model", model));
     }
 
     public sealed class MistralRealtimeSession : IRealtimeTranscriptionSession
@@ -226,27 +189,14 @@ public sealed class MistralRealtimeTranscriptionClient
 
         private async Task SendJsonMessageAsync<TMessage>(TMessage message, CancellationToken cancellationToken)
         {
-            var payload = JsonSerializer.SerializeToUtf8Bytes(message, SerializerOptions);
-
-            await _sendLock.WaitAsync(cancellationToken);
-
-            try
-            {
-                if (_webSocket.State != WebSocketState.Open)
-                {
-                    throw new TranscriptionException("The Mistral realtime connection is no longer open.", true);
-                }
-
-                await _webSocket.SendAsync(payload, WebSocketMessageType.Text, true, cancellationToken);
-            }
-            catch (WebSocketException exception)
-            {
-                throw new TranscriptionException("Sending data to Mistral failed.", true, null, exception);
-            }
-            finally
-            {
-                _sendLock.Release();
-            }
+            await WebSocketUtilities.SendJsonAsync(
+                _webSocket,
+                _sendLock,
+                message,
+                SerializerOptions,
+                "The Mistral realtime connection is no longer open.",
+                "Sending data to Mistral failed.",
+                cancellationToken);
         }
 
         private async Task ReceiveLoopAsync()
@@ -257,30 +207,23 @@ public sealed class MistralRealtimeTranscriptionClient
             {
                 while (!_receiveLoopCancellationTokenSource.IsCancellationRequested)
                 {
-                    using var messageStream = new MemoryStream();
-                    WebSocketReceiveResult result;
+                    var message = await WebSocketUtilities.ReceiveTextMessageAsync(
+                        _webSocket,
+                        buffer,
+                        _receiveLoopCancellationTokenSource.Token);
 
-                    do
+                    if (message.IsClose)
                     {
-                        result = await _webSocket.ReceiveAsync(buffer, _receiveLoopCancellationTokenSource.Token);
-
-                        if (result.MessageType == WebSocketMessageType.Close)
-                        {
-                            _completionSource.TrySetResult(GetTranscriptSnapshot());
-                            return;
-                        }
-
-                        messageStream.Write(buffer, 0, result.Count);
+                        _completionSource.TrySetResult(GetTranscriptSnapshot());
+                        return;
                     }
-                    while (!result.EndOfMessage);
 
-                    if (result.MessageType != WebSocketMessageType.Text || messageStream.Length == 0)
+                    if (!message.HasText)
                     {
                         continue;
                     }
 
-                    var message = Encoding.UTF8.GetString(messageStream.ToArray());
-                    await HandleMessageAsync(message, _receiveLoopCancellationTokenSource.Token);
+                    await HandleMessageAsync(message.Text!, _receiveLoopCancellationTokenSource.Token);
                 }
             }
             catch (OperationCanceledException)
@@ -362,7 +305,7 @@ public sealed class MistralRealtimeTranscriptionClient
 
                     lock (_transcriptLock)
                     {
-                        _finalTranscript = NormalizeTranscriptText(doneMessage?.Text);
+                        _finalTranscript = TranscriptText.NormalizeWhitespace(doneMessage?.Text);
                     }
 
                     if (!string.IsNullOrWhiteSpace(doneMessage?.Language))
@@ -421,14 +364,14 @@ public sealed class MistralRealtimeTranscriptionClient
 
             lock (_transcriptLock)
             {
-                var finalTranscript = NormalizeTranscriptText(doneMessage.Text);
+                var finalTranscript = TranscriptText.NormalizeWhitespace(doneMessage.Text);
                 if (string.IsNullOrWhiteSpace(finalTranscript))
                 {
                     return;
                 }
 
-                var normalizedCommitted = NormalizeTranscriptText(_committedTranscript);
-                var remainingTranscript = BuildStreamingAppendChunk(normalizedCommitted, finalTranscript);
+                var normalizedCommitted = TranscriptText.NormalizeWhitespace(_committedTranscript);
+                var remainingTranscript = TranscriptText.BuildRevisionSuffix(normalizedCommitted, finalTranscript);
                 if (string.IsNullOrWhiteSpace(remainingTranscript))
                 {
                     if (!string.IsNullOrWhiteSpace(normalizedCommitted) &&
@@ -441,7 +384,7 @@ public sealed class MistralRealtimeTranscriptionClient
                     return;
                 }
 
-                chunkToPaste = BuildAppendChunk(normalizedCommitted, remainingTranscript);
+                chunkToPaste = TranscriptText.BuildAppendChunk(normalizedCommitted, remainingTranscript);
                 if (string.IsNullOrWhiteSpace(chunkToPaste))
                 {
                     return;
@@ -464,63 +407,6 @@ public sealed class MistralRealtimeTranscriptionClient
 
                 return _deltaTranscriptBuilder.ToString().Trim();
             }
-        }
-
-        private static string NormalizeTranscriptText(string? value)
-        {
-            if (string.IsNullOrWhiteSpace(value))
-            {
-                return string.Empty;
-            }
-
-            return string.Join(" ", value.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
-        }
-
-        private static string BuildStreamingAppendChunk(string existingTranscript, string nextTranscript)
-        {
-            if (string.IsNullOrWhiteSpace(nextTranscript))
-            {
-                return string.Empty;
-            }
-
-            if (string.IsNullOrEmpty(existingTranscript))
-            {
-                return nextTranscript;
-            }
-
-            if (!nextTranscript.StartsWith(existingTranscript, StringComparison.Ordinal))
-            {
-                return string.Empty;
-            }
-
-            return nextTranscript[existingTranscript.Length..];
-        }
-
-        private static string BuildAppendChunk(string existingTranscript, string nextTranscript)
-        {
-            if (string.IsNullOrWhiteSpace(nextTranscript))
-            {
-                return string.Empty;
-            }
-
-            if (string.IsNullOrEmpty(existingTranscript))
-            {
-                return nextTranscript;
-            }
-
-            return NeedsSeparator(existingTranscript[^1], nextTranscript[0])
-                ? $" {nextTranscript}"
-                : nextTranscript;
-        }
-
-        private static bool NeedsSeparator(char previous, char next)
-        {
-            return !char.IsWhiteSpace(previous) && !char.IsWhiteSpace(next) && !IsPunctuation(next);
-        }
-
-        private static bool IsPunctuation(char value)
-        {
-            return char.IsPunctuation(value) || value is ')' or ']' or '}';
         }
 
         private sealed class RealtimeEnvelope

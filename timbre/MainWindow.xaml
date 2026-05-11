@@ -224,9 +224,6 @@
                                 Width="160"
                                 HorizontalAlignment="Left"
                                 Header="VAD silence threshold"
-                                Minimum="0.5"
-                                Maximum="10"
-                                SmallChange="0.1"
                                 SpinButtonPlacementMode="Inline"
                                 ValueChanged="DeepgramVadSilenceThresholdNumberBox_ValueChanged" />
                             <TextBlock
@@ -346,9 +343,6 @@
                                 Width="160"
                                 HorizontalAlignment="Left"
                                 Header="VAD silence threshold"
-                                Minimum="0.3"
-                                Maximum="3"
-                                SmallChange="0.1"
                                 SpinButtonPlacementMode="Inline"
                                 ValueChanged="ElevenLabsVadSilenceThresholdNumberBox_ValueChanged" />
                             <TextBlock

@@ -19,6 +19,46 @@ public sealed record TranscriptionProviderSettings(
 
 public static class TranscriptionProviderSettingsAccessor
 {
+    private static readonly IReadOnlyDictionary<TranscriptionProvider, AppSettingsProviderFieldAccessors> ProviderFields =
+        new AppSettingsProviderFieldAccessors[]
+        {
+            new(
+                TranscriptionProvider.Groq,
+                settings => settings.GroqApiKey,
+                settings => settings.GroqModel,
+                settings => settings.GroqLanguage,
+                _ => false,
+                _ => null),
+            new(
+                TranscriptionProvider.Deepgram,
+                settings => settings.DeepgramApiKey,
+                settings => settings.DeepgramModel,
+                settings => settings.DeepgramLanguage,
+                settings => settings.DeepgramStreamingEnabled,
+                settings => settings.DeepgramVadSilenceThresholdSeconds),
+            new(
+                TranscriptionProvider.Mistral,
+                settings => settings.MistralApiKey,
+                settings => settings.MistralModel,
+                _ => null,
+                settings => settings.MistralStreamingEnabled,
+                _ => null),
+            new(
+                TranscriptionProvider.Cohere,
+                settings => settings.CohereApiKey,
+                settings => settings.CohereModel,
+                settings => settings.CohereLanguage,
+                _ => false,
+                _ => null),
+            new(
+                TranscriptionProvider.ElevenLabs,
+                settings => settings.ElevenLabsApiKey,
+                settings => settings.ElevenLabsModel,
+                settings => settings.ElevenLabsLanguage,
+                settings => settings.ElevenLabsStreamingEnabled,
+                settings => settings.ElevenLabsVadSilenceThresholdSeconds),
+        }.ToDictionary(fields => fields.Provider);
+
     public static TranscriptionProviderSettings GetTranscriptionProviderSettings(this AppSettings settings)
     {
         return settings.GetTranscriptionProviderSettings(settings.Provider);
@@ -55,59 +95,34 @@ public static class TranscriptionProviderSettingsAccessor
 
     private static string? GetApiKey(AppSettings settings, TranscriptionProvider provider)
     {
-        return provider switch
-        {
-            TranscriptionProvider.Deepgram => settings.DeepgramApiKey,
-            TranscriptionProvider.Mistral => settings.MistralApiKey,
-            TranscriptionProvider.Cohere => settings.CohereApiKey,
-            TranscriptionProvider.ElevenLabs => settings.ElevenLabsApiKey,
-            _ => settings.GroqApiKey,
-        };
+        return GetFields(provider).GetApiKey(settings);
     }
 
     private static string? GetModel(AppSettings settings, TranscriptionProvider provider)
     {
-        return provider switch
-        {
-            TranscriptionProvider.Deepgram => settings.DeepgramModel,
-            TranscriptionProvider.Mistral => settings.MistralModel,
-            TranscriptionProvider.Cohere => settings.CohereModel,
-            TranscriptionProvider.ElevenLabs => settings.ElevenLabsModel,
-            _ => settings.GroqModel,
-        };
+        return GetFields(provider).GetModel(settings);
     }
 
     private static string? GetLanguage(AppSettings settings, TranscriptionProvider provider)
     {
-        return provider switch
-        {
-            TranscriptionProvider.Deepgram => settings.DeepgramLanguage,
-            TranscriptionProvider.Mistral => null,
-            TranscriptionProvider.Cohere => settings.CohereLanguage,
-            TranscriptionProvider.ElevenLabs => settings.ElevenLabsLanguage,
-            _ => settings.GroqLanguage,
-        };
+        return GetFields(provider).GetLanguage(settings);
     }
 
     private static bool GetStreamingEnabled(AppSettings settings, TranscriptionProvider provider)
     {
-        return provider switch
-        {
-            TranscriptionProvider.Deepgram => settings.DeepgramStreamingEnabled,
-            TranscriptionProvider.Mistral => settings.MistralStreamingEnabled,
-            TranscriptionProvider.ElevenLabs => settings.ElevenLabsStreamingEnabled,
-            _ => false,
-        };
+        return GetFields(provider).GetStreamingEnabled(settings);
     }
 
     private static double? GetVadSilenceThresholdSeconds(AppSettings settings, TranscriptionProvider provider)
     {
-        return provider switch
-        {
-            TranscriptionProvider.Deepgram => settings.DeepgramVadSilenceThresholdSeconds,
-            TranscriptionProvider.ElevenLabs => settings.ElevenLabsVadSilenceThresholdSeconds,
-            _ => null,
-        };
+        return GetFields(provider).GetVadSilenceThresholdSeconds(settings);
+    }
+
+    private static AppSettingsProviderFieldAccessors GetFields(TranscriptionProvider provider)
+    {
+        return ProviderFields.TryGetValue(provider, out var fields)
+            ? fields
+            : ProviderFields[TranscriptionProvider.Groq];
     }
 
     private static double NormalizeVadSilenceThresholdSeconds(
@@ -125,4 +140,12 @@ public static class TranscriptionProviderSettingsAccessor
     {
         return string.IsNullOrWhiteSpace(apiKey) ? string.Empty : apiKey.Trim();
     }
+
+    private sealed record AppSettingsProviderFieldAccessors(
+        TranscriptionProvider Provider,
+        Func<AppSettings, string?> GetApiKey,
+        Func<AppSettings, string?> GetModel,
+        Func<AppSettings, string?> GetLanguage,
+        Func<AppSettings, bool> GetStreamingEnabled,
+        Func<AppSettings, double?> GetVadSilenceThresholdSeconds);
 }

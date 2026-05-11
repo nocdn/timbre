@@ -128,44 +128,10 @@ public sealed partial class MainWindow : Window
             LlmGroqApiKeyBox.Password = _viewModel.LlmGroqApiKey;
             LlmGroqModelComboBox.ItemsSource = _viewModel.AvailableLlmGroqModels;
             LlmGroqModelComboBox.SelectedItem = _viewModel.SelectedLlmGroqModel;
-            GroqApiKeyBox.Password = _viewModel.GroqApiKey;
-            GroqModelComboBox.ItemsSource = _viewModel.AvailableGroqModels;
-            GroqModelComboBox.SelectedItem = _viewModel.SelectedGroqModel;
-            GroqLanguageTextBox.Text = _viewModel.GroqLanguage;
-            DeepgramApiKeyBox.Password = _viewModel.DeepgramApiKey;
-            DeepgramStreamingToggle.IsOn = _viewModel.DeepgramStreamingEnabled;
-            DeepgramModelComboBox.ItemsSource = _viewModel.AvailableDeepgramModels;
-            DeepgramModelComboBox.SelectedItem = _viewModel.SelectedDeepgramModel;
-            ApplyVadSilenceThresholdDefinition(DeepgramVadSilenceThresholdNumberBox, TranscriptionProvider.Deepgram);
-            DeepgramVadSilenceThresholdNumberBox.Value = _viewModel.DeepgramVadSilenceThresholdSeconds;
-            DeepgramVadSilenceThresholdPanel.Visibility = _viewModel.DeepgramVadSilenceThresholdVisibility;
-            MistralApiKeyBox.Password = _viewModel.MistralApiKey;
-            MistralStreamingToggle.IsOn = _viewModel.MistralStreamingEnabled;
-            MistralModelComboBox.ItemsSource = _viewModel.AvailableMistralModels;
-            MistralModelComboBox.SelectedItem = _viewModel.SelectedMistralModel;
-            MistralStreamingModeComboBox.SelectedIndex = _viewModel.MistralRealtimeMode == MistralRealtimeMode.Slow ? 1 : 0;
-            MistralStreamingModeComboBox.IsEnabled = _viewModel.MistralStreamingEnabled;
-            MistralStreamingModeComboBox.Visibility = _viewModel.MistralStreamingEnabled ? Visibility.Visible : Visibility.Collapsed;
-            CohereApiKeyBox.Password = _viewModel.CohereApiKey;
-            CohereModelComboBox.ItemsSource = _viewModel.AvailableCohereModels;
-            CohereModelComboBox.SelectedItem = _viewModel.SelectedCohereModel;
-            CohereLanguageTextBox.Text = _viewModel.CohereLanguage;
-            ElevenLabsApiKeyBox.Password = _viewModel.ElevenLabsApiKey;
-            ElevenLabsStreamingToggle.IsOn = _viewModel.ElevenLabsStreamingEnabled;
-            ElevenLabsModelComboBox.ItemsSource = _viewModel.AvailableElevenLabsModels;
-            ElevenLabsModelComboBox.SelectedItem = _viewModel.SelectedElevenLabsModel;
-            ElevenLabsLanguageTextBox.Text = _viewModel.ElevenLabsLanguage;
-            ApplyVadSilenceThresholdDefinition(ElevenLabsVadSilenceThresholdNumberBox, TranscriptionProvider.ElevenLabs);
-            ElevenLabsVadSilenceThresholdNumberBox.Value = _viewModel.ElevenLabsVadSilenceThresholdSeconds;
-            ElevenLabsVadSilenceThresholdPanel.Visibility = _viewModel.ElevenLabsVadSilenceThresholdVisibility;
+            ApplyViewModelToProviderControls();
             LlmPostProcessingSettingsPanel.Visibility = _viewModel.LlmPostProcessingSettingsVisibility;
             CerebrasLlmSettingsPanel.Visibility = _viewModel.CerebrasLlmSettingsVisibility;
             GroqLlmSettingsPanel.Visibility = _viewModel.GroqLlmSettingsVisibility;
-            GroqSettingsPanel.Visibility = _viewModel.GroqSettingsVisibility;
-            DeepgramSettingsPanel.Visibility = _viewModel.DeepgramSettingsVisibility;
-            MistralSettingsPanel.Visibility = _viewModel.MistralSettingsVisibility;
-            CohereSettingsPanel.Visibility = _viewModel.CohereSettingsVisibility;
-            ElevenLabsSettingsPanel.Visibility = _viewModel.ElevenLabsSettingsVisibility;
             RestoreStatusText();
             HotkeyWarningTextBlock.Text = _viewModel.HotkeyWarningMessage;
             HotkeyWarningTextBlock.Visibility = _viewModel.HotkeyWarningVisibility;
@@ -607,35 +573,155 @@ public sealed partial class MainWindow : Window
         _viewModel.SelectedProvider = GetSelectedProviderFromControls();
         _viewModel.LlmPostProcessingEnabled = LlmPostProcessingToggle.IsOn;
         _viewModel.SelectedLlmPostProcessingProvider = GetSelectedLlmPostProcessingProviderFromControls();
-        _viewModel.GroqApiKey = GroqApiKeyBox.Password;
         _viewModel.CerebrasApiKey = CerebrasApiKeyBox.Password;
         _viewModel.LlmGroqApiKey = LlmGroqApiKeyBox.Password;
-        _viewModel.DeepgramApiKey = DeepgramApiKeyBox.Password;
-        _viewModel.MistralApiKey = MistralApiKeyBox.Password;
-        _viewModel.CohereApiKey = CohereApiKeyBox.Password;
-        _viewModel.ElevenLabsApiKey = ElevenLabsApiKeyBox.Password;
-        _viewModel.DeepgramStreamingEnabled = DeepgramStreamingToggle.IsOn;
-        _viewModel.MistralStreamingEnabled = MistralStreamingToggle.IsOn;
-        _viewModel.ElevenLabsStreamingEnabled = ElevenLabsStreamingToggle.IsOn;
-        _viewModel.MistralRealtimeMode = MistralStreamingModeComboBox.SelectedIndex == 1
-            ? MistralRealtimeMode.Slow
-            : MistralRealtimeMode.Fast;
         _viewModel.PushToTalk = PushToTalkToggle.IsOn;
         _viewModel.LaunchAtStartup = LaunchAtStartupToggle.IsOn;
         _viewModel.SoundFeedbackEnabled = SoundFeedbackToggle.IsOn;
         _viewModel.LlmPostProcessingPrompt = LlmPostProcessingPromptTextBox.Text;
         _viewModel.SelectedCerebrasModel = CerebrasModelComboBox.SelectedItem as string ?? _viewModel.AvailableCerebrasModels[0];
         _viewModel.SelectedLlmGroqModel = LlmGroqModelComboBox.SelectedItem as string ?? _viewModel.AvailableLlmGroqModels[0];
-        _viewModel.SelectedGroqModel = GroqModelComboBox.SelectedItem as string ?? _viewModel.AvailableGroqModels[0];
-        _viewModel.GroqLanguage = GroqLanguageTextBox.Text;
-        _viewModel.SelectedDeepgramModel = DeepgramModelComboBox.SelectedItem as string ?? _viewModel.AvailableDeepgramModels[0];
-        _viewModel.DeepgramVadSilenceThresholdSeconds = DeepgramVadSilenceThresholdNumberBox.Value;
-        _viewModel.SelectedMistralModel = MistralModelComboBox.SelectedItem as string ?? _viewModel.AvailableMistralModels[0];
-        _viewModel.SelectedCohereModel = CohereModelComboBox.SelectedItem as string ?? _viewModel.AvailableCohereModels[0];
-        _viewModel.CohereLanguage = CohereLanguageTextBox.Text;
-        _viewModel.SelectedElevenLabsModel = ElevenLabsModelComboBox.SelectedItem as string ?? _viewModel.AvailableElevenLabsModels[0];
-        _viewModel.ElevenLabsLanguage = ElevenLabsLanguageTextBox.Text;
-        _viewModel.ElevenLabsVadSilenceThresholdSeconds = ElevenLabsVadSilenceThresholdNumberBox.Value;
+        ApplyProviderControlsToViewModel();
+    }
+
+    private void ApplyViewModelToProviderControls()
+    {
+        foreach (var binding in GetProviderControlBindings())
+        {
+            binding.ApiKeyBox.Password = _viewModel.GetProviderApiKey(binding.Provider);
+            binding.ModelComboBox.ItemsSource = _viewModel.GetAvailableProviderModels(binding.Provider);
+            binding.ModelComboBox.SelectedItem = _viewModel.GetSelectedProviderModel(binding.Provider);
+            binding.SettingsPanel.Visibility = _viewModel.SelectedProvider == binding.Provider
+                ? Visibility.Visible
+                : Visibility.Collapsed;
+
+            if (binding.StreamingToggle is not null)
+            {
+                binding.StreamingToggle.IsOn = _viewModel.GetProviderStreamingEnabled(binding.Provider);
+            }
+
+            if (binding.LanguageTextBox is not null)
+            {
+                binding.LanguageTextBox.Text = _viewModel.GetProviderLanguage(binding.Provider);
+            }
+
+            if (binding.VadNumberBox is not null)
+            {
+                ApplyVadSilenceThresholdDefinition(binding.VadNumberBox, binding.Provider);
+                binding.VadNumberBox.Value = _viewModel.GetProviderVadSilenceThresholdSeconds(binding.Provider);
+            }
+
+            if (binding.VadPanel is not null)
+            {
+                binding.VadPanel.Visibility = _viewModel.GetProviderVadSilenceThresholdVisibility(binding.Provider);
+            }
+
+            binding.ApplyExtra?.Invoke();
+        }
+    }
+
+    private void ApplyProviderControlsToViewModel()
+    {
+        foreach (var binding in GetProviderControlBindings())
+        {
+            _viewModel.SetProviderApiKey(binding.Provider, binding.ApiKeyBox.Password);
+
+            if (binding.StreamingToggle is not null)
+            {
+                _viewModel.SetProviderStreamingEnabled(binding.Provider, binding.StreamingToggle.IsOn);
+            }
+
+            _viewModel.SetSelectedProviderModel(
+                binding.Provider,
+                GetSelectedModel(binding.ModelComboBox, _viewModel.GetAvailableProviderModels(binding.Provider)));
+
+            if (binding.LanguageTextBox is not null)
+            {
+                _viewModel.SetProviderLanguage(binding.Provider, binding.LanguageTextBox.Text);
+            }
+
+            if (binding.VadNumberBox is not null)
+            {
+                _viewModel.SetProviderVadSilenceThresholdSeconds(binding.Provider, binding.VadNumberBox.Value);
+            }
+
+            binding.ReadExtra?.Invoke();
+        }
+    }
+
+    private IReadOnlyList<ProviderControlBinding> GetProviderControlBindings()
+    {
+        return
+        [
+            new ProviderControlBinding
+            {
+                Provider = TranscriptionProvider.Groq,
+                SettingsPanel = GroqSettingsPanel,
+                ApiKeyBox = GroqApiKeyBox,
+                ModelComboBox = GroqModelComboBox,
+                LanguageTextBox = GroqLanguageTextBox,
+            },
+            new ProviderControlBinding
+            {
+                Provider = TranscriptionProvider.Deepgram,
+                SettingsPanel = DeepgramSettingsPanel,
+                ApiKeyBox = DeepgramApiKeyBox,
+                StreamingToggle = DeepgramStreamingToggle,
+                ModelComboBox = DeepgramModelComboBox,
+                VadPanel = DeepgramVadSilenceThresholdPanel,
+                VadNumberBox = DeepgramVadSilenceThresholdNumberBox,
+            },
+            new ProviderControlBinding
+            {
+                Provider = TranscriptionProvider.Mistral,
+                SettingsPanel = MistralSettingsPanel,
+                ApiKeyBox = MistralApiKeyBox,
+                StreamingToggle = MistralStreamingToggle,
+                ModelComboBox = MistralModelComboBox,
+                ApplyExtra = ApplyMistralStreamingModeControl,
+                ReadExtra = ReadMistralStreamingModeControl,
+            },
+            new ProviderControlBinding
+            {
+                Provider = TranscriptionProvider.Cohere,
+                SettingsPanel = CohereSettingsPanel,
+                ApiKeyBox = CohereApiKeyBox,
+                ModelComboBox = CohereModelComboBox,
+                LanguageTextBox = CohereLanguageTextBox,
+            },
+            new ProviderControlBinding
+            {
+                Provider = TranscriptionProvider.ElevenLabs,
+                SettingsPanel = ElevenLabsSettingsPanel,
+                ApiKeyBox = ElevenLabsApiKeyBox,
+                StreamingToggle = ElevenLabsStreamingToggle,
+                ModelComboBox = ElevenLabsModelComboBox,
+                LanguageTextBox = ElevenLabsLanguageTextBox,
+                VadPanel = ElevenLabsVadSilenceThresholdPanel,
+                VadNumberBox = ElevenLabsVadSilenceThresholdNumberBox,
+            },
+        ];
+    }
+
+    private void ApplyMistralStreamingModeControl()
+    {
+        MistralStreamingModeComboBox.SelectedIndex = _viewModel.MistralRealtimeMode == MistralRealtimeMode.Slow ? 1 : 0;
+        MistralStreamingModeComboBox.IsEnabled = _viewModel.MistralStreamingEnabled;
+        MistralStreamingModeComboBox.Visibility = _viewModel.MistralStreamingEnabled ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    private void ReadMistralStreamingModeControl()
+    {
+        _viewModel.MistralRealtimeMode = MistralStreamingModeComboBox.SelectedIndex == 1
+            ? MistralRealtimeMode.Slow
+            : MistralRealtimeMode.Fast;
+    }
+
+    private static string GetSelectedModel(ComboBox comboBox, IReadOnlyList<string> fallbackModels)
+    {
+        return comboBox.SelectedItem as string
+            ?? fallbackModels.FirstOrDefault()
+            ?? string.Empty;
     }
 
     private static void ApplyVadSilenceThresholdDefinition(NumberBox numberBox, TranscriptionProvider provider)
@@ -681,6 +767,29 @@ public sealed partial class MainWindow : Window
         }
 
         return TranscriptionProvider.Groq;
+    }
+
+    private sealed class ProviderControlBinding
+    {
+        public required TranscriptionProvider Provider { get; init; }
+
+        public required StackPanel SettingsPanel { get; init; }
+
+        public required PasswordBox ApiKeyBox { get; init; }
+
+        public required ComboBox ModelComboBox { get; init; }
+
+        public ToggleSwitch? StreamingToggle { get; init; }
+
+        public TextBox? LanguageTextBox { get; init; }
+
+        public StackPanel? VadPanel { get; init; }
+
+        public NumberBox? VadNumberBox { get; init; }
+
+        public Action? ApplyExtra { get; init; }
+
+        public Action? ReadExtra { get; init; }
     }
 
     private void RestoreStatusText()

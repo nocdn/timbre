@@ -218,44 +218,27 @@ public sealed class DeepgramStreamingTranscriptionClient
             TranscriptionProvider.Deepgram,
             vadSilenceThresholdSeconds,
             streamingEnabled: true);
-        var query = new StringBuilder();
-        AppendQuery(query, "model", model);
+        var vadSilenceThresholdText = vadSilenceThresholdMilliseconds.ToString(CultureInfo.InvariantCulture);
 
-        if (!isFluxModel)
-        {
-            AppendQuery(query, "language", language);
-        }
-
-        AppendQuery(query, "encoding", "linear16");
-        AppendQuery(query, "sample_rate", "16000");
-
-        if (isFluxModel)
-        {
-            AppendQuery(query, "eot_threshold", FluxEndOfTurnThreshold);
-            AppendQuery(query, "eager_eot_threshold", FluxEagerEndOfTurnThreshold);
-            AppendQuery(query, "eot_timeout_ms", vadSilenceThresholdMilliseconds.ToString(CultureInfo.InvariantCulture));
-        }
-        else
-        {
-            AppendQuery(query, "interim_results", "true");
-            AppendQuery(query, "endpointing", vadSilenceThresholdMilliseconds.ToString(CultureInfo.InvariantCulture));
-            AppendQuery(query, "punctuate", "true");
-            AppendQuery(query, "smart_format", "true");
-        }
-
-        return new UriBuilder(baseEndpoint) { Query = query.ToString() }.Uri;
-    }
-
-    private static void AppendQuery(StringBuilder builder, string key, string value)
-    {
-        if (builder.Length > 0)
-        {
-            builder.Append('&');
-        }
-
-        builder.Append(Uri.EscapeDataString(key));
-        builder.Append('=');
-        builder.Append(Uri.EscapeDataString(value));
+        return isFluxModel
+            ? UriQuery.Build(
+                baseEndpoint,
+                ("model", model),
+                ("encoding", "linear16"),
+                ("sample_rate", "16000"),
+                ("eot_threshold", FluxEndOfTurnThreshold),
+                ("eager_eot_threshold", FluxEagerEndOfTurnThreshold),
+                ("eot_timeout_ms", vadSilenceThresholdText))
+            : UriQuery.Build(
+                baseEndpoint,
+                ("model", model),
+                ("language", language),
+                ("encoding", "linear16"),
+                ("sample_rate", "16000"),
+                ("interim_results", "true"),
+                ("endpointing", vadSilenceThresholdText),
+                ("punctuate", "true"),
+                ("smart_format", "true"));
     }
 
     private static string ResolveModel(string? model)
@@ -468,27 +451,25 @@ public sealed class DeepgramStreamingSession : IRealtimeTranscriptionSession
 
     private async Task SendControlMessageAsync(string type, CancellationToken cancellationToken)
     {
-        await _sendLock.WaitAsync(cancellationToken);
-
-        try
+        if (_webSocket.State != WebSocketState.Open)
         {
-            if (_webSocket.State != WebSocketState.Open)
-            {
-                return;
-            }
-
-            var payload = Encoding.UTF8.GetBytes($"{{\"type\":\"{type}\"}}");
-            await _webSocket.SendAsync(payload, WebSocketMessageType.Text, true, cancellationToken);
-            DiagnosticsLogger.Info($"Deepgram control message sent. Type={type}.");
-
-            if (type == "CloseStream")
-            {
-                _closeStreamRequested = true;
-            }
+            return;
         }
-        finally
+
+        var payload = Encoding.UTF8.GetBytes($"{{\"type\":\"{type}\"}}");
+        await WebSocketUtilities.SendTextPayloadAsync(
+            _webSocket,
+            _sendLock,
+            payload,
+            "The Deepgram streaming connection is no longer open.",
+            "Sending data to Deepgram failed.",
+            cancellationToken);
+
+        DiagnosticsLogger.Info($"Deepgram control message sent. Type={type}.");
+
+        if (type == "CloseStream")
         {
-            _sendLock.Release();
+            _closeStreamRequested = true;
         }
     }
 
@@ -500,33 +481,26 @@ public sealed class DeepgramStreamingSession : IRealtimeTranscriptionSession
         {
             while (!_receiveLoopCancellationTokenSource.IsCancellationRequested)
             {
-                using var messageStream = new MemoryStream();
-                WebSocketReceiveResult result;
+                var message = await WebSocketUtilities.ReceiveTextMessageAsync(
+                    _webSocket,
+                    buffer,
+                    _receiveLoopCancellationTokenSource.Token);
 
-                do
+                if (message.IsClose)
                 {
-                    result = await _webSocket.ReceiveAsync(buffer, _receiveLoopCancellationTokenSource.Token);
-
-                    if (result.MessageType == WebSocketMessageType.Close)
-                    {
-                        DiagnosticsLogger.Info($"Deepgram server initiated close. CloseStatus={result.CloseStatus}, CloseStatusDescription='{result.CloseStatusDescription}'.");
-                        await FlushPendingFluxTranscriptAsync(CancellationToken.None);
-                        _completionSource.TrySetResult(GetFinalTranscriptSnapshot());
-                        return;
-                    }
-
-                    messageStream.Write(buffer, 0, result.Count);
+                    DiagnosticsLogger.Info($"Deepgram server initiated close. CloseStatus={message.CloseStatus}, CloseStatusDescription='{message.CloseStatusDescription}'.");
+                    await FlushPendingFluxTranscriptAsync(CancellationToken.None);
+                    _completionSource.TrySetResult(GetFinalTranscriptSnapshot());
+                    return;
                 }
-                while (!result.EndOfMessage);
 
-                if (result.MessageType != WebSocketMessageType.Text || messageStream.Length == 0)
+                if (!message.HasText)
                 {
                     continue;
                 }
 
-                var message = Encoding.UTF8.GetString(messageStream.ToArray());
-                DiagnosticsLogger.Info($"Deepgram text message received. Length={message.Length}, Preview='{CreateTranscriptPreview(message)}'.");
-                await HandleMessageAsync(message, _receiveLoopCancellationTokenSource.Token);
+                DiagnosticsLogger.Info($"Deepgram text message received. Length={message.Text!.Length}, Preview='{TranscriptText.Preview(message.Text)}'.");
+                await HandleMessageAsync(message.Text!, _receiveLoopCancellationTokenSource.Token);
             }
         }
         catch (OperationCanceledException)
@@ -598,8 +572,8 @@ public sealed class DeepgramStreamingSession : IRealtimeTranscriptionSession
 
         if (string.Equals(envelope.Type, "Error", StringComparison.OrdinalIgnoreCase))
         {
-            var description = NormalizeTranscriptText(envelope.Description);
-            var messageText = NormalizeTranscriptText(envelope.Message);
+            var description = TranscriptText.NormalizeWhitespace(envelope.Description);
+            var messageText = TranscriptText.NormalizeWhitespace(envelope.Message);
             var errorText = !string.IsNullOrWhiteSpace(description)
                 ? description
                 : !string.IsNullOrWhiteSpace(messageText)
@@ -614,8 +588,8 @@ public sealed class DeepgramStreamingSession : IRealtimeTranscriptionSession
 
     private async Task HandleFluxTurnInfoAsync(StreamingMessageEnvelope envelope, CancellationToken cancellationToken)
     {
-        var transcript = NormalizeTranscriptText(envelope.Transcript);
-        DiagnosticsLogger.Info($"Deepgram TurnInfo received. Event='{envelope.Event ?? string.Empty}', TurnIndex={envelope.TurnIndex?.ToString() ?? string.Empty}, TranscriptLength={transcript.Length}, Confidence={envelope.EndOfTurnConfidence?.ToString() ?? string.Empty}, TranscriptPreview='{CreateTranscriptPreview(transcript)}'.");
+        var transcript = TranscriptText.NormalizeWhitespace(envelope.Transcript);
+        DiagnosticsLogger.Info($"Deepgram TurnInfo received. Event='{envelope.Event ?? string.Empty}', TurnIndex={envelope.TurnIndex?.ToString() ?? string.Empty}, TranscriptLength={transcript.Length}, Confidence={envelope.EndOfTurnConfidence?.ToString() ?? string.Empty}, TranscriptPreview='{TranscriptText.Preview(transcript)}'.");
 
         TrackFluxTurnUpdate(envelope.TurnIndex, transcript);
 
@@ -639,8 +613,8 @@ public sealed class DeepgramStreamingSession : IRealtimeTranscriptionSession
 
     private async Task HandleLegacyResultsAsync(StreamingMessageEnvelope envelope, CancellationToken cancellationToken)
     {
-        var transcript = NormalizeTranscriptText(envelope.Channel?.Alternatives?.FirstOrDefault()?.Transcript);
-        DiagnosticsLogger.Info($"Deepgram results message. IsFinal={envelope.IsFinal}, FromFinalize={envelope.FromFinalize}, TranscriptLength={transcript.Length}, TranscriptPreview='{CreateTranscriptPreview(transcript)}'.");
+        var transcript = TranscriptText.NormalizeWhitespace(envelope.Channel?.Alternatives?.FirstOrDefault()?.Transcript);
+        DiagnosticsLogger.Info($"Deepgram results message. IsFinal={envelope.IsFinal}, FromFinalize={envelope.FromFinalize}, TranscriptLength={transcript.Length}, TranscriptPreview='{TranscriptText.Preview(transcript)}'.");
         if (!envelope.IsFinal || string.IsNullOrWhiteSpace(transcript))
         {
             return;
@@ -699,14 +673,14 @@ public sealed class DeepgramStreamingSession : IRealtimeTranscriptionSession
                 return string.Empty;
             }
 
-            var turnChunk = BuildStreamingAppendChunk(_activeTurnCommittedTranscript, transcript);
+            var turnChunk = TranscriptText.BuildRevisionSuffix(_activeTurnCommittedTranscript, transcript);
             if (string.IsNullOrWhiteSpace(turnChunk))
             {
-                DiagnosticsLogger.Info($"Deepgram turn revision could not be appended safely. Event='{triggerEvent}', ExistingCommitted='{CreateTranscriptPreview(_activeTurnCommittedTranscript)}', Incoming='{CreateTranscriptPreview(transcript)}'.");
+                DiagnosticsLogger.Info($"Deepgram turn revision could not be appended safely. Event='{triggerEvent}', ExistingCommitted='{TranscriptText.Preview(_activeTurnCommittedTranscript)}', Incoming='{TranscriptText.Preview(transcript)}'.");
                 return string.Empty;
             }
 
-            var chunkToPaste = BuildAppendChunk(_completedTranscript, turnChunk);
+            var chunkToPaste = TranscriptText.BuildAppendChunk(_completedTranscript, turnChunk);
 
             _completedTranscript += chunkToPaste;
             _activeTurnIndex = turnIndex;
@@ -733,13 +707,13 @@ public sealed class DeepgramStreamingSession : IRealtimeTranscriptionSession
                 return;
             }
 
-            var pendingTurnChunk = BuildStreamingAppendChunk(_activeTurnCommittedTranscript, _activeTurnLatestTranscript);
+            var pendingTurnChunk = TranscriptText.BuildRevisionSuffix(_activeTurnCommittedTranscript, _activeTurnLatestTranscript);
             if (string.IsNullOrWhiteSpace(pendingTurnChunk))
             {
                 return;
             }
 
-            chunkToPaste = BuildAppendChunk(_completedTranscript, pendingTurnChunk);
+            chunkToPaste = TranscriptText.BuildAppendChunk(_completedTranscript, pendingTurnChunk);
 
             if (!string.IsNullOrWhiteSpace(chunkToPaste))
             {
@@ -750,7 +724,7 @@ public sealed class DeepgramStreamingSession : IRealtimeTranscriptionSession
 
         if (!string.IsNullOrWhiteSpace(chunkToPaste))
         {
-            DiagnosticsLogger.Info($"Flushing pending Deepgram transcript chunk on completion. TextLength={chunkToPaste.Length}, Preview='{CreateTranscriptPreview(chunkToPaste)}'.");
+            DiagnosticsLogger.Info($"Flushing pending Deepgram transcript chunk on completion. TextLength={chunkToPaste.Length}, Preview='{TranscriptText.Preview(chunkToPaste)}'.");
             await _transcriptChunkHandler(chunkToPaste, cancellationToken);
         }
     }
@@ -759,7 +733,7 @@ public sealed class DeepgramStreamingSession : IRealtimeTranscriptionSession
     {
         lock (_transcriptLock)
         {
-            var chunk = BuildAppendChunk(_completedTranscript, transcript);
+            var chunk = TranscriptText.BuildAppendChunk(_completedTranscript, transcript);
             if (!string.IsNullOrWhiteSpace(chunk))
             {
                 _completedTranscript += chunk;
@@ -777,10 +751,10 @@ public sealed class DeepgramStreamingSession : IRealtimeTranscriptionSession
 
             if (!string.IsNullOrWhiteSpace(_activeTurnLatestTranscript))
             {
-                var pendingTurnChunk = BuildStreamingAppendChunk(_activeTurnCommittedTranscript, _activeTurnLatestTranscript);
+                var pendingTurnChunk = TranscriptText.BuildRevisionSuffix(_activeTurnCommittedTranscript, _activeTurnLatestTranscript);
                 if (!string.IsNullOrWhiteSpace(pendingTurnChunk))
                 {
-                    transcript += BuildAppendChunk(transcript, pendingTurnChunk);
+                    transcript += TranscriptText.BuildAppendChunk(transcript, pendingTurnChunk);
                 }
             }
 
@@ -794,87 +768,10 @@ public sealed class DeepgramStreamingSession : IRealtimeTranscriptionSession
             || string.Equals(eventName, "EndOfTurn", StringComparison.OrdinalIgnoreCase);
     }
 
-    private static string NormalizeTranscriptText(string? value)
-    {
-        if (string.IsNullOrWhiteSpace(value))
-        {
-            return string.Empty;
-        }
-
-        return string.Join(" ", value.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
-    }
-
-    private static string BuildStreamingAppendChunk(string existingTranscript, string nextTranscript)
-    {
-        if (string.IsNullOrWhiteSpace(nextTranscript))
-        {
-            return string.Empty;
-        }
-
-        if (string.IsNullOrEmpty(existingTranscript))
-        {
-            return nextTranscript;
-        }
-
-        if (!nextTranscript.StartsWith(existingTranscript, StringComparison.Ordinal))
-        {
-            return string.Empty;
-        }
-
-        return nextTranscript[existingTranscript.Length..];
-    }
-
-    private static string BuildAppendChunk(string existingTranscript, string nextTranscript)
-    {
-        if (string.IsNullOrWhiteSpace(nextTranscript))
-        {
-            return string.Empty;
-        }
-
-        if (string.IsNullOrEmpty(existingTranscript))
-        {
-            return nextTranscript;
-        }
-
-        return NeedsSeparator(existingTranscript[^1], nextTranscript[0])
-            ? $" {nextTranscript}"
-            : nextTranscript;
-    }
-
-    private static bool NeedsSeparator(char previousCharacter, char nextCharacter)
-    {
-        if (char.IsWhiteSpace(previousCharacter) || char.IsWhiteSpace(nextCharacter))
-        {
-            return false;
-        }
-
-        return !IsLeadingPunctuation(nextCharacter) && !IsTrailingPunctuation(previousCharacter);
-    }
-
-    private static bool IsLeadingPunctuation(char value)
-    {
-        return value is '.' or ',' or '!' or '?' or ';' or ':' or ')' or ']' or '}' or '\'' or '"';
-    }
-
-    private static bool IsTrailingPunctuation(char value)
-    {
-        return value is '(' or '[' or '{' or '/' or '-' or '\'' or '"';
-    }
-
     private static TranscriptionException WrapException(Exception exception)
     {
         return exception as TranscriptionException
             ?? new TranscriptionException("The Deepgram streaming session failed.", true, null, exception);
-    }
-
-    private static string CreateTranscriptPreview(string transcript)
-    {
-        if (string.IsNullOrEmpty(transcript))
-        {
-            return string.Empty;
-        }
-
-        return transcript.Length <= 120 ? transcript : transcript[..120] + "...";
     }
 
     private sealed class StreamingMessageEnvelope

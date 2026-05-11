@@ -75,6 +75,19 @@ public sealed class AppSettingsStoreTests
         reloadedSettings.DeepgramApiKey.Should().Be("deepgram-secret");
     }
 
+    [Fact]
+    public void NormalizeSettings_UsesLlmProviderCatalogDefaults()
+    {
+        var settings = AppSettingsStore.NormalizeSettings(new AppSettings
+        {
+            CerebrasModel = " ",
+            LlmGroqModel = " ",
+        });
+
+        settings.CerebrasModel.Should().Be(LlmPostProcessingCatalog.Get(LlmPostProcessingProvider.Cerebras).DefaultModel);
+        settings.LlmGroqModel.Should().Be(LlmPostProcessingCatalog.Get(LlmPostProcessingProvider.Groq).DefaultModel);
+    }
+
     private static string CreateSettingsDirectory()
     {
         var settingsDirectory = Path.Combine(Path.GetTempPath(), "timbre-tests", Guid.NewGuid().ToString("N"));

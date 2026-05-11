@@ -5,8 +5,6 @@ namespace timbre.Services;
 
 public sealed class MistralTranscriptionClient : ITranscriptionClient
 {
-    private static readonly Uri Endpoint = new("https://api.mistral.ai/v1/audio/transcriptions");
-
     private readonly TranscriptionHttpExecutor _httpExecutor;
 
     public MistralTranscriptionClient(HttpClient httpClient)
@@ -21,23 +19,9 @@ public sealed class MistralTranscriptionClient : ITranscriptionClient
         string? language,
         CancellationToken cancellationToken = default)
     {
-        var resolvedModel = TranscriptionProviderCatalog.NormalizeModel(
-            TranscriptionProvider.Mistral,
-            model,
-            streamingEnabled: false);
-        var requestLanguage = TranscriptionProviderCatalog.NormalizeRequestLanguage(TranscriptionProvider.Mistral, language);
-
         return _httpExecutor.TranscribeAsync(
             audioBytes,
-            new TranscriptionHttpRequestSpec
-            {
-                ProviderName = "Mistral",
-                Endpoint = Endpoint,
-                ApiKey = apiKey,
-                Model = resolvedModel,
-                Language = requestLanguage,
-                Authorization = TranscriptionHttpAuthorization.Bearer(apiKey),
-            },
+            TranscriptionHttpRequestSpecs.Create(TranscriptionProvider.Mistral, apiKey, model, language),
             cancellationToken);
     }
 }

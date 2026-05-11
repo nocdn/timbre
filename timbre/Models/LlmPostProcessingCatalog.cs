@@ -1,5 +1,50 @@
 namespace timbre.Models;
 
+public sealed class LlmProviderDefinition
+{
+    public LlmProviderDefinition(
+        LlmPostProcessingProvider provider,
+        string displayName,
+        Uri chatCompletionsEndpoint,
+        Uri modelsEndpoint,
+        string defaultModel,
+        IReadOnlyList<string> builtInModels,
+        Func<string, bool>? modelFilter = null)
+    {
+        Provider = provider;
+        DisplayName = displayName;
+        ChatCompletionsEndpoint = chatCompletionsEndpoint;
+        ModelsEndpoint = modelsEndpoint;
+        DefaultModel = defaultModel;
+        BuiltInModels = builtInModels;
+        ModelFilter = modelFilter ?? (_ => true);
+    }
+
+    public LlmPostProcessingProvider Provider { get; }
+
+    public string DisplayName { get; }
+
+    public Uri ChatCompletionsEndpoint { get; }
+
+    public Uri ModelsEndpoint { get; }
+
+    public string DefaultModel { get; }
+
+    public IReadOnlyList<string> BuiltInModels { get; }
+
+    public Func<string, bool> ModelFilter { get; }
+}
+
+public sealed record LlmPostProcessingProviderSettings(
+    LlmPostProcessingProvider Provider,
+    string ApiKey,
+    string Model)
+{
+    public LlmProviderDefinition Definition => LlmPostProcessingCatalog.Get(Provider);
+
+    public string DisplayName => Definition.DisplayName;
+}
+
 public static class LlmPostProcessingCatalog
 {
     public const LlmPostProcessingProvider DefaultProvider = LlmPostProcessingProvider.Cerebras;
@@ -38,4 +83,62 @@ public static class LlmPostProcessingCatalog
         "meta-llama/llama-4-scout-17b-16e-instruct",
         "qwen/qwen3-32b",
     ];
+
+    public static IReadOnlyList<LlmProviderDefinition> Providers { get; } =
+    [
+        new(
+            LlmPostProcessingProvider.Cerebras,
+            "Cerebras",
+            new Uri("https://api.cerebras.ai/v1/chat/completions"),
+            new Uri("https://api.cerebras.ai/v1/models"),
+            DefaultCerebrasModel,
+            CerebrasModels),
+        new(
+            LlmPostProcessingProvider.Groq,
+            "Groq",
+            new Uri("https://api.groq.com/openai/v1/chat/completions"),
+            new Uri("https://api.groq.com/openai/v1/models"),
+            DefaultGroqModel,
+            GroqModels,
+            IsSupportedGroqChatModel),
+    ];
+
+    public static LlmProviderDefinition Get(LlmPostProcessingProvider provider)
+    {
+        return Providers.FirstOrDefault(definition => definition.Provider == provider)
+            ?? Providers.First(definition => definition.Provider == DefaultProvider);
+    }
+
+    public static LlmPostProcessingProviderSettings GetSettings(this AppSettings settings)
+    {
+        var provider = settings.LlmPostProcessingProvider;
+        var definition = Get(provider);
+        var apiKey = provider == LlmPostProcessingProvider.Groq
+            ? settings.LlmGroqApiKey ?? string.Empty
+            : settings.CerebrasApiKey ?? string.Empty;
+        var model = provider == LlmPostProcessingProvider.Groq
+            ? settings.LlmGroqModel
+            : settings.CerebrasModel;
+
+        return new LlmPostProcessingProviderSettings(
+            provider,
+            string.IsNullOrWhiteSpace(apiKey) ? string.Empty : apiKey.Trim(),
+            string.IsNullOrWhiteSpace(model) ? definition.DefaultModel : model.Trim());
+    }
+
+    public static string NormalizeModel(LlmPostProcessingProvider provider, string? model)
+    {
+        var definition = Get(provider);
+        return string.IsNullOrWhiteSpace(model) ? definition.DefaultModel : model.Trim();
+    }
+
+    private static bool IsSupportedGroqChatModel(string modelId)
+    {
+        var normalized = modelId.Trim().ToLowerInvariant();
+        return !normalized.Contains("whisper", StringComparison.Ordinal) &&
+               !normalized.Contains("prompt-guard", StringComparison.Ordinal) &&
+               !normalized.Contains("safeguard", StringComparison.Ordinal) &&
+               !normalized.Contains("orpheus", StringComparison.Ordinal) &&
+               !normalized.StartsWith("groq/compound", StringComparison.Ordinal);
+    }
 }

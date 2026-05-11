@@ -38,8 +38,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private int _transcriptHistoryLimit = 200;
     private double _transcriptHistoryLimitValue = 200;
     private string _llmPostProcessingPrompt = LlmPostProcessingCatalog.DefaultPrompt;
-    private string _selectedCerebrasModel = LlmPostProcessingCatalog.DefaultCerebrasModel;
-    private string _selectedLlmGroqModel = LlmPostProcessingCatalog.DefaultGroqModel;
+    private string _selectedCerebrasModel = LlmPostProcessingCatalog.Get(LlmPostProcessingProvider.Cerebras).DefaultModel;
+    private string _selectedLlmGroqModel = LlmPostProcessingCatalog.Get(LlmPostProcessingProvider.Groq).DefaultModel;
     private string _selectedGroqModel = TranscriptionProviderCatalog.DefaultGroqModel;
     private string _groqLanguage = TranscriptionProviderCatalog.Get(TranscriptionProvider.Groq).DefaultLanguage;
     private string _selectedDeepgramModel = TranscriptionProviderCatalog.DefaultDeepgramStreamingModel;
@@ -85,8 +85,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         _llmModelCatalogClient = llmModelCatalogClient;
         _uiDispatcherQueueAccessor = uiDispatcherQueueAccessor;
 
-        AvailableCerebrasModels = new ObservableCollection<string>(LlmPostProcessingCatalog.CerebrasModels);
-        AvailableLlmGroqModels = new ObservableCollection<string>(LlmPostProcessingCatalog.GroqModels);
+        AvailableCerebrasModels = new ObservableCollection<string>(LlmPostProcessingCatalog.Get(LlmPostProcessingProvider.Cerebras).BuiltInModels);
+        AvailableLlmGroqModels = new ObservableCollection<string>(LlmPostProcessingCatalog.Get(LlmPostProcessingProvider.Groq).BuiltInModels);
 
         _transcriptHistoryStore.HistoryChanged += OnHistoryChanged;
         _dictationController.StatusChanged += OnDictationStatusChanged;
@@ -141,15 +141,15 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         }
     }
 
-    public bool IsCerebrasLlmSelected => SelectedLlmPostProcessingProvider == LlmPostProcessingProvider.Cerebras;
+    public bool IsCerebrasLlmSelected => IsLlmProviderSelected(LlmPostProcessingProvider.Cerebras);
 
-    public bool IsGroqLlmSelected => SelectedLlmPostProcessingProvider == LlmPostProcessingProvider.Groq;
+    public bool IsGroqLlmSelected => IsLlmProviderSelected(LlmPostProcessingProvider.Groq);
 
     public Visibility LlmPostProcessingSettingsVisibility => LlmPostProcessingEnabled ? Visibility.Visible : Visibility.Collapsed;
 
-    public Visibility CerebrasLlmSettingsVisibility => LlmPostProcessingEnabled && IsCerebrasLlmSelected ? Visibility.Visible : Visibility.Collapsed;
+    public Visibility CerebrasLlmSettingsVisibility => GetLlmProviderVisibility(LlmPostProcessingProvider.Cerebras);
 
-    public Visibility GroqLlmSettingsVisibility => LlmPostProcessingEnabled && IsGroqLlmSelected ? Visibility.Visible : Visibility.Collapsed;
+    public Visibility GroqLlmSettingsVisibility => GetLlmProviderVisibility(LlmPostProcessingProvider.Groq);
 
     public TranscriptionProvider SelectedProvider
     {
@@ -172,25 +172,25 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         }
     }
 
-    public bool IsGroqSelected => SelectedProvider == TranscriptionProvider.Groq;
+    public bool IsGroqSelected => IsProviderSelected(TranscriptionProvider.Groq);
 
-    public bool IsDeepgramSelected => SelectedProvider == TranscriptionProvider.Deepgram;
+    public bool IsDeepgramSelected => IsProviderSelected(TranscriptionProvider.Deepgram);
 
-    public bool IsMistralSelected => SelectedProvider == TranscriptionProvider.Mistral;
+    public bool IsMistralSelected => IsProviderSelected(TranscriptionProvider.Mistral);
 
-    public bool IsCohereSelected => SelectedProvider == TranscriptionProvider.Cohere;
+    public bool IsCohereSelected => IsProviderSelected(TranscriptionProvider.Cohere);
 
-    public bool IsElevenLabsSelected => SelectedProvider == TranscriptionProvider.ElevenLabs;
+    public bool IsElevenLabsSelected => IsProviderSelected(TranscriptionProvider.ElevenLabs);
 
-    public Visibility GroqSettingsVisibility => IsGroqSelected ? Visibility.Visible : Visibility.Collapsed;
+    public Visibility GroqSettingsVisibility => GetProviderVisibility(TranscriptionProvider.Groq);
 
-    public Visibility DeepgramSettingsVisibility => IsDeepgramSelected ? Visibility.Visible : Visibility.Collapsed;
+    public Visibility DeepgramSettingsVisibility => GetProviderVisibility(TranscriptionProvider.Deepgram);
 
-    public Visibility MistralSettingsVisibility => IsMistralSelected ? Visibility.Visible : Visibility.Collapsed;
+    public Visibility MistralSettingsVisibility => GetProviderVisibility(TranscriptionProvider.Mistral);
 
-    public Visibility CohereSettingsVisibility => IsCohereSelected ? Visibility.Visible : Visibility.Collapsed;
+    public Visibility CohereSettingsVisibility => GetProviderVisibility(TranscriptionProvider.Cohere);
 
-    public Visibility ElevenLabsSettingsVisibility => IsElevenLabsSelected ? Visibility.Visible : Visibility.Collapsed;
+    public Visibility ElevenLabsSettingsVisibility => GetProviderVisibility(TranscriptionProvider.ElevenLabs);
 
     public AudioInputDevice? SelectedInputDevice
     {
@@ -250,7 +250,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
                 OnPropertyChanged(nameof(AvailableDeepgramModels));
                 OnPropertyChanged(nameof(DeepgramVadSilenceThresholdVisibility));
 
-                SelectedDeepgramModel = SelectPreferredProviderModel(
+                SelectedDeepgramModel = SelectPreferredModel(
                     AvailableDeepgramModels,
                     SelectedDeepgramModel,
                     TranscriptionProviderCatalog.GetDefaultModel(TranscriptionProvider.Deepgram, value));
@@ -267,7 +267,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             {
                 OnPropertyChanged(nameof(AvailableMistralModels));
 
-                SelectedMistralModel = SelectPreferredProviderModel(
+                SelectedMistralModel = SelectPreferredModel(
                     AvailableMistralModels,
                     SelectedMistralModel,
                     TranscriptionProviderCatalog.GetDefaultModel(TranscriptionProvider.Mistral, value));
@@ -285,7 +285,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
                 OnPropertyChanged(nameof(AvailableElevenLabsModels));
                 OnPropertyChanged(nameof(ElevenLabsVadSilenceThresholdVisibility));
 
-                SelectedElevenLabsModel = SelectPreferredProviderModel(
+                SelectedElevenLabsModel = SelectPreferredModel(
                     AvailableElevenLabsModels,
                     SelectedElevenLabsModel,
                     TranscriptionProviderCatalog.GetDefaultModel(TranscriptionProvider.ElevenLabs, value));
@@ -435,17 +435,173 @@ public sealed class MainViewModel : ObservableObject, IDisposable
                 streamingEnabled: true));
     }
 
-    public Visibility DeepgramVadSilenceThresholdVisibility => TranscriptionProviderCatalog.SupportsVadSilenceThreshold(
-        TranscriptionProvider.Deepgram,
-        DeepgramStreamingEnabled)
-        ? Visibility.Visible
-        : Visibility.Collapsed;
+    public Visibility DeepgramVadSilenceThresholdVisibility => GetVadSilenceThresholdVisibility(TranscriptionProvider.Deepgram, DeepgramStreamingEnabled);
 
-    public Visibility ElevenLabsVadSilenceThresholdVisibility => TranscriptionProviderCatalog.SupportsVadSilenceThreshold(
-        TranscriptionProvider.ElevenLabs,
-        ElevenLabsStreamingEnabled)
-        ? Visibility.Visible
-        : Visibility.Collapsed;
+    public Visibility ElevenLabsVadSilenceThresholdVisibility => GetVadSilenceThresholdVisibility(TranscriptionProvider.ElevenLabs, ElevenLabsStreamingEnabled);
+
+    public string GetProviderApiKey(TranscriptionProvider provider)
+    {
+        return provider switch
+        {
+            TranscriptionProvider.Deepgram => DeepgramApiKey,
+            TranscriptionProvider.Mistral => MistralApiKey,
+            TranscriptionProvider.Cohere => CohereApiKey,
+            TranscriptionProvider.ElevenLabs => ElevenLabsApiKey,
+            _ => GroqApiKey,
+        };
+    }
+
+    public void SetProviderApiKey(TranscriptionProvider provider, string value)
+    {
+        switch (provider)
+        {
+            case TranscriptionProvider.Deepgram:
+                DeepgramApiKey = value;
+                break;
+            case TranscriptionProvider.Mistral:
+                MistralApiKey = value;
+                break;
+            case TranscriptionProvider.Cohere:
+                CohereApiKey = value;
+                break;
+            case TranscriptionProvider.ElevenLabs:
+                ElevenLabsApiKey = value;
+                break;
+            default:
+                GroqApiKey = value;
+                break;
+        }
+    }
+
+    public IReadOnlyList<string> GetAvailableProviderModels(TranscriptionProvider provider)
+    {
+        return provider switch
+        {
+            TranscriptionProvider.Deepgram => AvailableDeepgramModels,
+            TranscriptionProvider.Mistral => AvailableMistralModels,
+            TranscriptionProvider.Cohere => AvailableCohereModels,
+            TranscriptionProvider.ElevenLabs => AvailableElevenLabsModels,
+            _ => AvailableGroqModels,
+        };
+    }
+
+    public string GetSelectedProviderModel(TranscriptionProvider provider)
+    {
+        return provider switch
+        {
+            TranscriptionProvider.Deepgram => SelectedDeepgramModel,
+            TranscriptionProvider.Mistral => SelectedMistralModel,
+            TranscriptionProvider.Cohere => SelectedCohereModel,
+            TranscriptionProvider.ElevenLabs => SelectedElevenLabsModel,
+            _ => SelectedGroqModel,
+        };
+    }
+
+    public void SetSelectedProviderModel(TranscriptionProvider provider, string value)
+    {
+        switch (provider)
+        {
+            case TranscriptionProvider.Deepgram:
+                SelectedDeepgramModel = value;
+                break;
+            case TranscriptionProvider.Mistral:
+                SelectedMistralModel = value;
+                break;
+            case TranscriptionProvider.Cohere:
+                SelectedCohereModel = value;
+                break;
+            case TranscriptionProvider.ElevenLabs:
+                SelectedElevenLabsModel = value;
+                break;
+            default:
+                SelectedGroqModel = value;
+                break;
+        }
+    }
+
+    public string GetProviderLanguage(TranscriptionProvider provider)
+    {
+        return provider switch
+        {
+            TranscriptionProvider.Cohere => CohereLanguage,
+            TranscriptionProvider.ElevenLabs => ElevenLabsLanguage,
+            _ => GroqLanguage,
+        };
+    }
+
+    public void SetProviderLanguage(TranscriptionProvider provider, string value)
+    {
+        switch (provider)
+        {
+            case TranscriptionProvider.Cohere:
+                CohereLanguage = value;
+                break;
+            case TranscriptionProvider.ElevenLabs:
+                ElevenLabsLanguage = value;
+                break;
+            case TranscriptionProvider.Groq:
+                GroqLanguage = value;
+                break;
+        }
+    }
+
+    public bool GetProviderStreamingEnabled(TranscriptionProvider provider)
+    {
+        return provider switch
+        {
+            TranscriptionProvider.Deepgram => DeepgramStreamingEnabled,
+            TranscriptionProvider.Mistral => MistralStreamingEnabled,
+            TranscriptionProvider.ElevenLabs => ElevenLabsStreamingEnabled,
+            _ => false,
+        };
+    }
+
+    public void SetProviderStreamingEnabled(TranscriptionProvider provider, bool value)
+    {
+        switch (provider)
+        {
+            case TranscriptionProvider.Deepgram:
+                DeepgramStreamingEnabled = value;
+                break;
+            case TranscriptionProvider.Mistral:
+                MistralStreamingEnabled = value;
+                break;
+            case TranscriptionProvider.ElevenLabs:
+                ElevenLabsStreamingEnabled = value;
+                break;
+        }
+    }
+
+    public double GetProviderVadSilenceThresholdSeconds(TranscriptionProvider provider)
+    {
+        return provider switch
+        {
+            TranscriptionProvider.ElevenLabs => ElevenLabsVadSilenceThresholdSeconds,
+            _ => DeepgramVadSilenceThresholdSeconds,
+        };
+    }
+
+    public void SetProviderVadSilenceThresholdSeconds(TranscriptionProvider provider, double value)
+    {
+        switch (provider)
+        {
+            case TranscriptionProvider.Deepgram:
+                DeepgramVadSilenceThresholdSeconds = value;
+                break;
+            case TranscriptionProvider.ElevenLabs:
+                ElevenLabsVadSilenceThresholdSeconds = value;
+                break;
+        }
+    }
+
+    public Visibility GetProviderVadSilenceThresholdVisibility(TranscriptionProvider provider)
+    {
+        return provider switch
+        {
+            TranscriptionProvider.ElevenLabs => ElevenLabsVadSilenceThresholdVisibility,
+            _ => DeepgramVadSilenceThresholdVisibility,
+        };
+    }
 
     public string RecordingHotkeyDisplay
     {
@@ -634,18 +790,26 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
     public async Task FetchCerebrasModelsAsync(CancellationToken cancellationToken = default)
     {
-        var models = await _llmModelCatalogClient.FetchCerebrasModelsAsync(CerebrasApiKey, cancellationToken);
-        ReplaceModels(AvailableCerebrasModels, models);
-        _fetchedCerebrasModels = [.. models];
-        SelectedCerebrasModel = SelectPreferredModel(AvailableCerebrasModels, SelectedCerebrasModel, LlmPostProcessingCatalog.DefaultCerebrasModel);
+        await FetchLlmModelsAsync(
+            LlmPostProcessingProvider.Cerebras,
+            CerebrasApiKey,
+            AvailableCerebrasModels,
+            SelectedCerebrasModel,
+            value => SelectedCerebrasModel = value,
+            value => _fetchedCerebrasModels = value,
+            cancellationToken);
     }
 
     public async Task FetchLlmGroqModelsAsync(CancellationToken cancellationToken = default)
     {
-        var models = await _llmModelCatalogClient.FetchGroqModelsAsync(LlmGroqApiKey, cancellationToken);
-        ReplaceModels(AvailableLlmGroqModels, models);
-        _fetchedLlmGroqModels = [.. models];
-        SelectedLlmGroqModel = SelectPreferredModel(AvailableLlmGroqModels, SelectedLlmGroqModel, LlmPostProcessingCatalog.DefaultGroqModel);
+        await FetchLlmModelsAsync(
+            LlmPostProcessingProvider.Groq,
+            LlmGroqApiKey,
+            AvailableLlmGroqModels,
+            SelectedLlmGroqModel,
+            value => SelectedLlmGroqModel = value,
+            value => _fetchedLlmGroqModels = value,
+            cancellationToken);
     }
 
     public void ResetLlmPostProcessingPrompt()
@@ -713,14 +877,16 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         LlmPostProcessingPrompt = string.IsNullOrWhiteSpace(settings.LlmPostProcessingPrompt)
             ? LlmPostProcessingCatalog.DefaultPrompt
             : settings.LlmPostProcessingPrompt;
-        ReplaceModels(AvailableCerebrasModels, settings.FetchedCerebrasModels?.Count > 0 ? settings.FetchedCerebrasModels : LlmPostProcessingCatalog.CerebrasModels);
-        ReplaceModels(AvailableLlmGroqModels, settings.FetchedLlmGroqModels?.Count > 0 ? settings.FetchedLlmGroqModels : LlmPostProcessingCatalog.GroqModels);
+        var cerebrasDefinition = LlmPostProcessingCatalog.Get(LlmPostProcessingProvider.Cerebras);
+        var groqLlmDefinition = LlmPostProcessingCatalog.Get(LlmPostProcessingProvider.Groq);
+        ReplaceModels(AvailableCerebrasModels, settings.FetchedCerebrasModels?.Count > 0 ? settings.FetchedCerebrasModels : cerebrasDefinition.BuiltInModels);
+        ReplaceModels(AvailableLlmGroqModels, settings.FetchedLlmGroqModels?.Count > 0 ? settings.FetchedLlmGroqModels : groqLlmDefinition.BuiltInModels);
         _fetchedCerebrasModels = settings.FetchedCerebrasModels?.Count > 0 ? [.. settings.FetchedCerebrasModels] : null;
         _fetchedLlmGroqModels = settings.FetchedLlmGroqModels?.Count > 0 ? [.. settings.FetchedLlmGroqModels] : null;
-        EnsureModelAvailable(AvailableCerebrasModels, settings.CerebrasModel, LlmPostProcessingCatalog.DefaultCerebrasModel);
-        EnsureModelAvailable(AvailableLlmGroqModels, settings.LlmGroqModel, LlmPostProcessingCatalog.DefaultGroqModel);
-        SelectedCerebrasModel = SelectPreferredModel(AvailableCerebrasModels, settings.CerebrasModel, LlmPostProcessingCatalog.DefaultCerebrasModel);
-        SelectedLlmGroqModel = SelectPreferredModel(AvailableLlmGroqModels, settings.LlmGroqModel, LlmPostProcessingCatalog.DefaultGroqModel);
+        EnsureModelAvailable(AvailableCerebrasModels, settings.CerebrasModel, cerebrasDefinition.DefaultModel);
+        EnsureModelAvailable(AvailableLlmGroqModels, settings.LlmGroqModel, groqLlmDefinition.DefaultModel);
+        SelectedCerebrasModel = SelectPreferredModel(AvailableCerebrasModels, settings.CerebrasModel, cerebrasDefinition.DefaultModel);
+        SelectedLlmGroqModel = SelectPreferredModel(AvailableLlmGroqModels, settings.LlmGroqModel, groqLlmDefinition.DefaultModel);
         SelectedGroqModel = groqSettings.Model;
         GroqLanguage = groqSettings.Language;
         SelectedDeepgramModel = deepgramSettings.Model;
@@ -767,8 +933,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
                 : LlmPostProcessingPrompt.Trim(),
             FetchedCerebrasModels = _fetchedCerebrasModels,
             FetchedLlmGroqModels = _fetchedLlmGroqModels,
-            CerebrasModel = string.IsNullOrWhiteSpace(SelectedCerebrasModel) ? AvailableCerebrasModels[0] : SelectedCerebrasModel,
-            LlmGroqModel = string.IsNullOrWhiteSpace(SelectedLlmGroqModel) ? AvailableLlmGroqModels[0] : SelectedLlmGroqModel,
+            CerebrasModel = SelectPreferredModel(AvailableCerebrasModels, SelectedCerebrasModel, LlmPostProcessingCatalog.Get(LlmPostProcessingProvider.Cerebras).DefaultModel),
+            LlmGroqModel = SelectPreferredModel(AvailableLlmGroqModels, SelectedLlmGroqModel, LlmPostProcessingCatalog.Get(LlmPostProcessingProvider.Groq).DefaultModel),
             GroqModel = SelectedGroqModel,
             GroqLanguage = GroqLanguage,
             DeepgramModel = SelectedDeepgramModel,
@@ -862,6 +1028,33 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         return Math.Clamp((int)Math.Round(value), 0, 500);
     }
 
+    private bool IsProviderSelected(TranscriptionProvider provider)
+    {
+        return SelectedProvider == provider;
+    }
+
+    private Visibility GetProviderVisibility(TranscriptionProvider provider)
+    {
+        return IsProviderSelected(provider) ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    private bool IsLlmProviderSelected(LlmPostProcessingProvider provider)
+    {
+        return SelectedLlmPostProcessingProvider == provider;
+    }
+
+    private Visibility GetLlmProviderVisibility(LlmPostProcessingProvider provider)
+    {
+        return LlmPostProcessingEnabled && IsLlmProviderSelected(provider) ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    private static Visibility GetVadSilenceThresholdVisibility(TranscriptionProvider provider, bool streamingEnabled)
+    {
+        return TranscriptionProviderCatalog.SupportsVadSilenceThreshold(provider, streamingEnabled)
+            ? Visibility.Visible
+            : Visibility.Collapsed;
+    }
+
     private static bool AreSettingsEquivalent(AppSettings left, AppSettings right)
     {
         return string.Equals(left.SelectedInputDeviceId, right.SelectedInputDeviceId, StringComparison.Ordinal) &&
@@ -914,15 +1107,26 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         models.Add(normalizedSelectedModel);
     }
 
-    private static string SelectPreferredModel(ObservableCollection<string> models, string? selectedModel, string fallbackModel)
+    private async Task FetchLlmModelsAsync(
+        LlmPostProcessingProvider provider,
+        string apiKey,
+        ObservableCollection<string> targetModels,
+        string selectedModel,
+        Action<string> applySelectedModel,
+        Action<List<string>> applyFetchedModels,
+        CancellationToken cancellationToken)
     {
-        var normalizedSelectedModel = string.IsNullOrWhiteSpace(selectedModel) ? fallbackModel : selectedModel.Trim();
-        return models.FirstOrDefault(model => string.Equals(model, normalizedSelectedModel, StringComparison.Ordinal))
-            ?? models.FirstOrDefault()
-            ?? fallbackModel;
+        var models = provider == LlmPostProcessingProvider.Groq
+            ? await _llmModelCatalogClient.FetchGroqModelsAsync(apiKey, cancellationToken)
+            : await _llmModelCatalogClient.FetchCerebrasModelsAsync(apiKey, cancellationToken);
+
+        var definition = LlmPostProcessingCatalog.Get(provider);
+        ReplaceModels(targetModels, models);
+        applyFetchedModels([.. models]);
+        applySelectedModel(SelectPreferredModel(targetModels, selectedModel, definition.DefaultModel));
     }
 
-    private static string SelectPreferredProviderModel(IReadOnlyList<string> models, string? selectedModel, string fallbackModel)
+    private static string SelectPreferredModel(IEnumerable<string> models, string? selectedModel, string fallbackModel)
     {
         var normalizedSelectedModel = string.IsNullOrWhiteSpace(selectedModel) ? fallbackModel : selectedModel.Trim();
         return models.FirstOrDefault(model => string.Equals(model, normalizedSelectedModel, StringComparison.Ordinal))

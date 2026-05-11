@@ -1,7 +1,5 @@
-using System.Net;
 using System.Net.Http;
 using System.Net.WebSockets;
-using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Globalization;
@@ -132,61 +130,32 @@ public sealed class ElevenLabsRealtimeTranscriptionClient
         Func<string, CancellationToken, Task> transcriptChunkHandler,
         CancellationToken cancellationToken)
     {
-        var webSocket = new ClientWebSocket();
-        webSocket.Options.CollectHttpResponseDetails = true;
-        webSocket.Options.KeepAliveInterval = TimeSpan.FromSeconds(10);
-        configureWebSocket?.Invoke(webSocket);
-        ElevenLabsRealtimeSession? session = null;
         var sanitizedEndpoint = SanitizeEndpointForLog(endpoint);
 
-        try
-        {
-            DiagnosticsLogger.Info(
-                $"ElevenLabs realtime connection starting. Endpoint={sanitizedEndpoint}, AuthMode={DescribeAuthMode(authMode)}, Model={RealtimeModel}, AudioFormat={AudioFormat}, SampleRate={SampleRate}, Language='{language ?? "auto"}', VadSilenceThresholdSeconds={vadSilenceThresholdSeconds.ToString(CultureInfo.InvariantCulture)}.");
-
-            await webSocket.ConnectAsync(endpoint, cancellationToken);
-
-            session = new ElevenLabsRealtimeSession(webSocket, transcriptChunkHandler);
-            await session.InitializeAsync(cancellationToken);
-            DiagnosticsLogger.Info(
-                $"ElevenLabs realtime connection established. Endpoint={sanitizedEndpoint}, AuthMode={DescribeAuthMode(authMode)}, Model={RealtimeModel}, Language='{language ?? "auto"}', VadSilenceThresholdSeconds={vadSilenceThresholdSeconds.ToString(CultureInfo.InvariantCulture)}.");
-            return session;
-        }
-        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
-        {
-            if (session is not null)
+        return await RealtimeWebSocketConnector.ConnectAsync(
+            endpoint,
+            webSocket =>
             {
-                await session.DisposeAsync();
-            }
-            else
+                webSocket.Options.CollectHttpResponseDetails = true;
+                configureWebSocket?.Invoke(webSocket);
+            },
+            webSocket => new ElevenLabsRealtimeSession(webSocket, transcriptChunkHandler),
+            (session, token) => session.InitializeAsync(token),
+            "Connecting to ElevenLabs timed out.",
+            "The ElevenLabs realtime connection failed",
+            () => $"ElevenLabs realtime connection starting. Endpoint={sanitizedEndpoint}, AuthMode={DescribeAuthMode(authMode)}, Model={RealtimeModel}, AudioFormat={AudioFormat}, SampleRate={SampleRate}, Language='{language ?? "auto"}', VadSilenceThresholdSeconds={vadSilenceThresholdSeconds.ToString(CultureInfo.InvariantCulture)}.",
+            () => $"ElevenLabs realtime connection established. Endpoint={sanitizedEndpoint}, AuthMode={DescribeAuthMode(authMode)}, Model={RealtimeModel}, Language='{language ?? "auto"}', VadSilenceThresholdSeconds={vadSilenceThresholdSeconds.ToString(CultureInfo.InvariantCulture)}.",
+            (webSocket, exception) =>
             {
-                webSocket.Dispose();
-            }
+                var responseStatus = webSocket.HttpStatusCode == 0
+                    ? "<not collected>"
+                    : $"{(int)webSocket.HttpStatusCode} {webSocket.HttpStatusCode}";
 
-            throw new TranscriptionException("Connecting to ElevenLabs timed out.", true);
-        }
-        catch (Exception exception)
-        {
-            var responseStatus = webSocket.HttpStatusCode == 0
-                ? "<not collected>"
-                : $"{(int)webSocket.HttpStatusCode} {webSocket.HttpStatusCode}";
-
-            DiagnosticsLogger.Error(
-                $"ElevenLabs realtime connection failed. Endpoint={sanitizedEndpoint}, AuthMode={DescribeAuthMode(authMode)}, ResponseStatus={responseStatus}.",
-                exception);
-
-            if (session is not null)
-            {
-                await session.DisposeAsync();
-            }
-            else
-            {
-                webSocket.Dispose();
-            }
-
-            throw exception as TranscriptionException
-                ?? new TranscriptionException($"The ElevenLabs realtime connection failed: {exception.Message}", true, null, exception);
-        }
+                DiagnosticsLogger.Error(
+                    $"ElevenLabs realtime connection failed. Endpoint={sanitizedEndpoint}, AuthMode={DescribeAuthMode(authMode)}, ResponseStatus={responseStatus}.",
+                    exception);
+            },
+            cancellationToken);
     }
 
     private async Task<string> CreateSingleUseTokenAsync(string apiKey, CancellationToken cancellationToken)
@@ -204,8 +173,8 @@ public sealed class ElevenLabsRealtimeTranscriptionClient
         if (!response.IsSuccessStatusCode)
         {
             throw new TranscriptionException(
-                ExtractHttpErrorMessage(responseBody, (int)response.StatusCode),
-                IsTransientStatusCode(response.StatusCode),
+                JsonErrorMessageExtractor.Extract(responseBody, "ElevenLabs", (int)response.StatusCode),
+                HttpStatusUtilities.IsTransient(response.StatusCode),
                 response.StatusCode);
         }
 
@@ -233,39 +202,15 @@ public sealed class ElevenLabsRealtimeTranscriptionClient
 
     internal static Uri BuildEndpoint(string? language, double vadSilenceThresholdSeconds, string? token = null)
     {
-        var query = new StringBuilder();
-        AppendQuery(query, "model_id", RealtimeModel);
-        if (!string.IsNullOrWhiteSpace(token))
-        {
-            AppendQuery(query, "token", token);
-        }
-
-        AppendQuery(query, "audio_format", AudioFormat);
-        AppendQuery(query, "commit_strategy", "vad");
-        AppendQuery(
-            query,
-            "vad_silence_threshold_secs",
-            vadSilenceThresholdSeconds.ToString(CultureInfo.InvariantCulture));
-        AppendQuery(query, "include_timestamps", "false");
-
-        if (!string.IsNullOrWhiteSpace(language))
-        {
-            AppendQuery(query, "language_code", language);
-        }
-
-        return new UriBuilder(Endpoint) { Query = query.ToString() }.Uri;
-    }
-
-    private static void AppendQuery(StringBuilder builder, string key, string value)
-    {
-        if (builder.Length > 0)
-        {
-            builder.Append('&');
-        }
-
-        builder.Append(Uri.EscapeDataString(key));
-        builder.Append('=');
-        builder.Append(Uri.EscapeDataString(value));
+        return UriQuery.Build(
+            Endpoint,
+            ("model_id", RealtimeModel),
+            ("token", token),
+            ("audio_format", AudioFormat),
+            ("commit_strategy", "vad"),
+            ("vad_silence_threshold_secs", vadSilenceThresholdSeconds.ToString(CultureInfo.InvariantCulture)),
+            ("include_timestamps", "false"),
+            ("language_code", language));
     }
 
     private static string ResolveModel(string? value)
@@ -302,124 +247,7 @@ public sealed class ElevenLabsRealtimeTranscriptionClient
 
     private static string SanitizeEndpointForLog(Uri endpoint)
     {
-        var query = ParseQuery(endpoint.Query);
-        if (query.ContainsKey("token"))
-        {
-            query["token"] = "<redacted>";
-        }
-
-        var sanitizedQuery = string.Join(
-            "&",
-            query.Select(pair => $"{Uri.EscapeDataString(pair.Key)}={Uri.EscapeDataString(pair.Value)}"));
-
-        return new UriBuilder(endpoint)
-        {
-            Query = sanitizedQuery,
-        }.Uri.ToString();
-    }
-
-    private static Dictionary<string, string> ParseQuery(string query)
-    {
-        var results = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        if (string.IsNullOrWhiteSpace(query))
-        {
-            return results;
-        }
-
-        foreach (var pair in query.TrimStart('?').Split('&', StringSplitOptions.RemoveEmptyEntries))
-        {
-            var separatorIndex = pair.IndexOf('=');
-            if (separatorIndex < 0)
-            {
-                results[Uri.UnescapeDataString(pair)] = string.Empty;
-                continue;
-            }
-
-            var key = Uri.UnescapeDataString(pair[..separatorIndex]);
-            var value = Uri.UnescapeDataString(pair[(separatorIndex + 1)..]);
-            results[key] = value;
-        }
-
-        return results;
-    }
-
-    private static string ExtractHttpErrorMessage(string responseBody, int statusCode)
-    {
-        try
-        {
-            using var document = JsonDocument.Parse(responseBody);
-            var root = document.RootElement;
-
-            if (TryReadStringProperty(root, "message", out var message))
-            {
-                return message;
-            }
-
-            if (TryReadStringProperty(root, "detail", out var detail))
-            {
-                return detail;
-            }
-
-            if (root.TryGetProperty("detail", out var detailObject) && detailObject.ValueKind == JsonValueKind.Object)
-            {
-                if (TryReadStringProperty(detailObject, "message", out var detailMessage))
-                {
-                    return detailMessage;
-                }
-
-                if (TryReadStringProperty(detailObject, "msg", out var detailMsg))
-                {
-                    return detailMsg;
-                }
-            }
-
-            if (root.TryGetProperty("error", out var errorElement))
-            {
-                if (errorElement.ValueKind == JsonValueKind.String && !string.IsNullOrWhiteSpace(errorElement.GetString()))
-                {
-                    return errorElement.GetString()!;
-                }
-
-                if (errorElement.ValueKind == JsonValueKind.Object)
-                {
-                    if (TryReadStringProperty(errorElement, "message", out var nestedMessage))
-                    {
-                        return nestedMessage;
-                    }
-
-                    if (TryReadStringProperty(errorElement, "detail", out var nestedDetail))
-                    {
-                        return nestedDetail;
-                    }
-                }
-            }
-        }
-        catch (JsonException)
-        {
-        }
-
-        return $"ElevenLabs returned HTTP {statusCode}.";
-    }
-
-    private static bool TryReadStringProperty(JsonElement element, string propertyName, out string value)
-    {
-        value = string.Empty;
-
-        if (!element.TryGetProperty(propertyName, out var property) ||
-            property.ValueKind != JsonValueKind.String ||
-            string.IsNullOrWhiteSpace(property.GetString()))
-        {
-            return false;
-        }
-
-        value = property.GetString()!.Trim();
-        return true;
-    }
-
-    private static bool IsTransientStatusCode(HttpStatusCode statusCode)
-    {
-        var numericStatusCode = (int)statusCode;
-        return numericStatusCode == 408 || numericStatusCode == 429 || numericStatusCode >= 500;
+        return UriQuery.Redact(endpoint, "token").ToString();
     }
 
     private enum ConnectionAuthMode
@@ -570,27 +398,14 @@ public sealed class ElevenLabsRealtimeTranscriptionClient
 
         private async Task SendJsonMessageAsync<TMessage>(TMessage message, CancellationToken cancellationToken)
         {
-            var payload = JsonSerializer.SerializeToUtf8Bytes(message, SerializerOptions);
-
-            await _sendLock.WaitAsync(cancellationToken);
-
-            try
-            {
-                if (_webSocket.State != WebSocketState.Open)
-                {
-                    throw new TranscriptionException("The ElevenLabs realtime connection is no longer open.", true);
-                }
-
-                await _webSocket.SendAsync(payload, WebSocketMessageType.Text, true, cancellationToken);
-            }
-            catch (WebSocketException exception)
-            {
-                throw new TranscriptionException("Sending data to ElevenLabs failed.", true, null, exception);
-            }
-            finally
-            {
-                _sendLock.Release();
-            }
+            await WebSocketUtilities.SendJsonAsync(
+                _webSocket,
+                _sendLock,
+                message,
+                SerializerOptions,
+                "The ElevenLabs realtime connection is no longer open.",
+                "Sending data to ElevenLabs failed.",
+                cancellationToken);
         }
 
         private async Task ReceiveLoopAsync()
@@ -601,47 +416,39 @@ public sealed class ElevenLabsRealtimeTranscriptionClient
             {
                 while (!_receiveLoopCancellationTokenSource.IsCancellationRequested)
                 {
-                    using var messageStream = new MemoryStream();
-                    WebSocketReceiveResult result;
+                    var message = await WebSocketUtilities.ReceiveTextMessageAsync(
+                        _webSocket,
+                        buffer,
+                        _receiveLoopCancellationTokenSource.Token);
 
-                    do
+                    if (message.IsClose)
                     {
-                        result = await _webSocket.ReceiveAsync(buffer, _receiveLoopCancellationTokenSource.Token);
+                        DiagnosticsLogger.Info($"ElevenLabs server initiated close. CloseStatus={message.CloseStatus}, CloseStatusDescription='{message.CloseStatusDescription}'.");
 
-                        if (result.MessageType == WebSocketMessageType.Close)
+                        if (_sessionStarted)
                         {
-                            DiagnosticsLogger.Info($"ElevenLabs server initiated close. CloseStatus={result.CloseStatus}, CloseStatusDescription='{result.CloseStatusDescription}'.");
-
-                            if (_sessionStarted)
-                            {
-                                _completionSource.TrySetResult(GetTranscriptSnapshot());
-                            }
-                            else
-                            {
-                                _sessionStartedSource.TrySetException(CreateClosedBeforeStartException(result.CloseStatus, result.CloseStatusDescription));
-                            }
-
-                            return;
+                            _completionSource.TrySetResult(GetTranscriptSnapshot());
+                        }
+                        else
+                        {
+                            _sessionStartedSource.TrySetException(CreateClosedBeforeStartException(message.CloseStatus, message.CloseStatusDescription));
                         }
 
-                        messageStream.Write(buffer, 0, result.Count);
+                        return;
                     }
-                    while (!result.EndOfMessage);
 
-                    if (result.MessageType != WebSocketMessageType.Text || messageStream.Length == 0)
+                    if (!message.HasText)
                     {
                         continue;
                     }
 
-                    var message = Encoding.UTF8.GetString(messageStream.ToArray());
-
                     if (!_sessionStarted)
                     {
                         DiagnosticsLogger.Info(
-                            $"ElevenLabs realtime initialization message received. Length={message.Length}, Preview='{CreateTranscriptPreview(message)}'.");
+                            $"ElevenLabs realtime initialization message received. Length={message.Text!.Length}, Preview='{TranscriptText.Preview(message.Text)}'.");
                     }
 
-                    await HandleMessageAsync(message, _receiveLoopCancellationTokenSource.Token);
+                    await HandleMessageAsync(message.Text!, _receiveLoopCancellationTokenSource.Token);
                 }
             }
             catch (OperationCanceledException)
@@ -695,7 +502,7 @@ public sealed class ElevenLabsRealtimeTranscriptionClient
                 }
                 case "partial_transcript":
                 {
-                    DiagnosticsLogger.Info($"ElevenLabs realtime partial transcript received. TextLength={envelope.Text?.Length ?? 0}, Preview='{CreateTranscriptPreview(envelope.Text)}'.");
+                    DiagnosticsLogger.Info($"ElevenLabs realtime partial transcript received. TextLength={envelope.Text?.Length ?? 0}, Preview='{TranscriptText.Preview(envelope.Text)}'.");
                     return;
                 }
                 case "committed_transcript":
@@ -767,7 +574,7 @@ public sealed class ElevenLabsRealtimeTranscriptionClient
 
         private async Task CommitTranscriptAsync(string? text, CancellationToken cancellationToken)
         {
-            var transcript = NormalizeTranscriptText(text);
+            var transcript = TranscriptText.NormalizeWhitespace(text);
             if (string.IsNullOrWhiteSpace(transcript))
             {
                 return;
@@ -777,13 +584,13 @@ public sealed class ElevenLabsRealtimeTranscriptionClient
 
             lock (_transcriptLock)
             {
-                chunkToPaste = BuildAppendChunk(_completedTranscript, transcript);
+                chunkToPaste = TranscriptText.BuildAppendChunk(_completedTranscript, transcript);
                 _completedTranscript += chunkToPaste;
             }
 
             if (!string.IsNullOrWhiteSpace(chunkToPaste))
             {
-                DiagnosticsLogger.Info($"ElevenLabs realtime committed transcript received. TextLength={chunkToPaste.Length}, Preview='{CreateTranscriptPreview(chunkToPaste)}'.");
+                DiagnosticsLogger.Info($"ElevenLabs realtime committed transcript received. TextLength={chunkToPaste.Length}, Preview='{TranscriptText.Preview(chunkToPaste)}'.");
                 await _transcriptChunkHandler(chunkToPaste, cancellationToken);
             }
         }
@@ -794,53 +601,6 @@ public sealed class ElevenLabsRealtimeTranscriptionClient
             {
                 return _completedTranscript.Trim();
             }
-        }
-
-        private static string NormalizeTranscriptText(string? value)
-        {
-            if (string.IsNullOrWhiteSpace(value))
-            {
-                return string.Empty;
-            }
-
-            return string.Join(" ", value.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
-        }
-
-        private static string BuildAppendChunk(string existingTranscript, string nextTranscript)
-        {
-            if (string.IsNullOrWhiteSpace(nextTranscript))
-            {
-                return string.Empty;
-            }
-
-            if (string.IsNullOrEmpty(existingTranscript))
-            {
-                return nextTranscript;
-            }
-
-            return NeedsSeparator(existingTranscript[^1], nextTranscript[0])
-                ? $" {nextTranscript}"
-                : nextTranscript;
-        }
-
-        private static bool NeedsSeparator(char previousCharacter, char nextCharacter)
-        {
-            if (char.IsWhiteSpace(previousCharacter) || char.IsWhiteSpace(nextCharacter))
-            {
-                return false;
-            }
-
-            return !IsLeadingPunctuation(nextCharacter) && !IsTrailingPunctuation(previousCharacter);
-        }
-
-        private static bool IsLeadingPunctuation(char value)
-        {
-            return value is '.' or ',' or '!' or '?' or ';' or ':' or ')' or ']' or '}' or '\'' or '"';
-        }
-
-        private static bool IsTrailingPunctuation(char value)
-        {
-            return value is '(' or '[' or '{' or '/' or '-' or '\'' or '"';
         }
 
         private static bool IsErrorMessageType(string messageType)
@@ -894,22 +654,9 @@ public sealed class ElevenLabsRealtimeTranscriptionClient
             if (envelope.Error.HasValue)
             {
                 var errorElement = envelope.Error.Value;
-                if (errorElement.ValueKind == JsonValueKind.String && !string.IsNullOrWhiteSpace(errorElement.GetString()))
+                if (JsonErrorMessageExtractor.TryExtract(errorElement, out var errorMessage))
                 {
-                    return errorElement.GetString()!.Trim();
-                }
-
-                if (errorElement.ValueKind == JsonValueKind.Object)
-                {
-                    if (TryReadStringProperty(errorElement, "message", out var nestedMessage))
-                    {
-                        return nestedMessage;
-                    }
-
-                    if (TryReadStringProperty(errorElement, "detail", out var nestedDetail))
-                    {
-                        return nestedDetail;
-                    }
+                    return errorMessage;
                 }
             }
 
@@ -925,31 +672,6 @@ public sealed class ElevenLabsRealtimeTranscriptionClient
             return new TranscriptionException(
                 $"ElevenLabs closed the realtime connection before the session started. Close details: {details}.",
                 true);
-        }
-
-        private static bool TryReadStringProperty(JsonElement element, string propertyName, out string value)
-        {
-            value = string.Empty;
-
-            if (!element.TryGetProperty(propertyName, out var property) ||
-                property.ValueKind != JsonValueKind.String ||
-                string.IsNullOrWhiteSpace(property.GetString()))
-            {
-                return false;
-            }
-
-            value = property.GetString()!.Trim();
-            return true;
-        }
-
-        private static string CreateTranscriptPreview(string? transcript)
-        {
-            if (string.IsNullOrEmpty(transcript))
-            {
-                return string.Empty;
-            }
-
-            return transcript.Length <= 120 ? transcript : transcript[..120] + "...";
         }
 
         private sealed class InputAudioChunkMessage

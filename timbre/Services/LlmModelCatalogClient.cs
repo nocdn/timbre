@@ -7,9 +7,6 @@ namespace timbre.Services;
 
 public sealed class LlmModelCatalogClient
 {
-    private static readonly Uri CerebrasModelsEndpoint = new("https://api.cerebras.ai/v1/models");
-    private static readonly Uri GroqModelsEndpoint = new("https://api.groq.com/openai/v1/models");
-
     private readonly HttpClient _httpClient;
 
     public LlmModelCatalogClient(HttpClient httpClient)
@@ -19,70 +16,59 @@ public sealed class LlmModelCatalogClient
 
     public Task<IReadOnlyList<string>> FetchCerebrasModelsAsync(string apiKey, CancellationToken cancellationToken = default)
     {
-        return FetchModelsAsync(
-            providerName: "Cerebras",
-            endpoint: CerebrasModelsEndpoint,
-            apiKey: apiKey,
-            filter: static _ => true,
-            cancellationToken: cancellationToken);
+        return FetchModelsAsync(LlmPostProcessingProvider.Cerebras, apiKey, cancellationToken);
     }
 
     public Task<IReadOnlyList<string>> FetchGroqModelsAsync(string apiKey, CancellationToken cancellationToken = default)
     {
-        return FetchModelsAsync(
-            providerName: "Groq",
-            endpoint: GroqModelsEndpoint,
-            apiKey: apiKey,
-            filter: IsSupportedGroqChatModel,
-            cancellationToken: cancellationToken);
+        return FetchModelsAsync(LlmPostProcessingProvider.Groq, apiKey, cancellationToken);
     }
 
     private async Task<IReadOnlyList<string>> FetchModelsAsync(
-        string providerName,
-        Uri endpoint,
+        LlmPostProcessingProvider provider,
         string apiKey,
-        Func<string, bool> filter,
         CancellationToken cancellationToken)
     {
+        var definition = LlmPostProcessingCatalog.Get(provider);
         if (string.IsNullOrWhiteSpace(apiKey))
         {
-            throw new InvalidOperationException($"Enter a {providerName} API key before fetching models.");
+            throw new InvalidOperationException($"Enter a {definition.DisplayName} API key before fetching models.");
         }
 
         try
         {
-            using var request = new HttpRequestMessage(HttpMethod.Get, endpoint);
+            using var request = new HttpRequestMessage(HttpMethod.Get, definition.ModelsEndpoint);
             request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", apiKey.Trim());
 
-            DiagnosticsLogger.Info($"Fetching LLM models. Provider={providerName}, Endpoint={endpoint}.");
+            DiagnosticsLogger.Info($"Fetching LLM models. Provider={definition.DisplayName}, Endpoint={definition.ModelsEndpoint}.");
             using var response = await _httpClient.SendAsync(request, cancellationToken);
             var responseBody = await response.Content.ReadAsStringAsync(cancellationToken);
-            DiagnosticsLogger.Info($"LLM models fetch response received. Provider={providerName}, Status={(int)response.StatusCode} {response.StatusCode}, BodyLength={responseBody.Length}.");
+            DiagnosticsLogger.Info($"LLM models fetch response received. Provider={definition.DisplayName}, Status={(int)response.StatusCode} {response.StatusCode}, BodyLength={responseBody.Length}.");
 
             if (!response.IsSuccessStatusCode)
             {
-                throw new InvalidOperationException(ExtractErrorMessage(responseBody, providerName, (int)response.StatusCode));
+                throw new InvalidOperationException(JsonErrorMessageExtractor.Extract(responseBody, definition.DisplayName, (int)response.StatusCode));
             }
 
-            var models = ExtractModels(responseBody, filter);
+            var models = ExtractModels(responseBody, definition.ModelFilter);
             if (models.Count == 0)
             {
-                throw new InvalidOperationException($"{providerName} did not return any chat-capable models.");
+                throw new InvalidOperationException($"{definition.DisplayName} did not return any chat-capable models.");
             }
 
             return models;
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
-            throw new InvalidOperationException($"Fetching models from {providerName} timed out.");
+            throw new InvalidOperationException($"Fetching models from {definition.DisplayName} timed out.");
         }
         catch (HttpRequestException exception)
         {
-            throw new InvalidOperationException($"The request to fetch models from {providerName} failed.", exception);
+            throw new InvalidOperationException($"The request to fetch models from {definition.DisplayName} failed.", exception);
         }
         catch (JsonException exception)
         {
-            throw new InvalidOperationException($"{providerName} returned an unreadable models response.", exception);
+            throw new InvalidOperationException($"{definition.DisplayName} returned an unreadable models response.", exception);
         }
     }
 
@@ -114,48 +100,4 @@ public sealed class LlmModelCatalogClient
         return models;
     }
 
-    private static bool IsSupportedGroqChatModel(string modelId)
-    {
-        var normalized = modelId.Trim().ToLowerInvariant();
-        return !normalized.Contains("whisper", StringComparison.Ordinal) &&
-               !normalized.Contains("prompt-guard", StringComparison.Ordinal) &&
-               !normalized.Contains("safeguard", StringComparison.Ordinal) &&
-               !normalized.Contains("orpheus", StringComparison.Ordinal) &&
-               !normalized.StartsWith("groq/compound", StringComparison.Ordinal);
-    }
-
-    private static string ExtractErrorMessage(string responseBody, string providerName, int statusCode)
-    {
-        try
-        {
-            using var document = JsonDocument.Parse(responseBody);
-            if (document.RootElement.TryGetProperty("error", out var errorElement))
-            {
-                if (errorElement.ValueKind == JsonValueKind.String && !string.IsNullOrWhiteSpace(errorElement.GetString()))
-                {
-                    return errorElement.GetString()!;
-                }
-
-                if (errorElement.ValueKind == JsonValueKind.Object &&
-                    errorElement.TryGetProperty("message", out var nestedMessage) &&
-                    nestedMessage.ValueKind == JsonValueKind.String &&
-                    !string.IsNullOrWhiteSpace(nestedMessage.GetString()))
-                {
-                    return nestedMessage.GetString()!;
-                }
-            }
-
-            if (document.RootElement.TryGetProperty("message", out var messageElement) &&
-                messageElement.ValueKind == JsonValueKind.String &&
-                !string.IsNullOrWhiteSpace(messageElement.GetString()))
-            {
-                return messageElement.GetString()!;
-            }
-        }
-        catch (JsonException)
-        {
-        }
-
-        return $"{providerName} returned HTTP {statusCode}.";
-    }
 }

@@ -5,8 +5,6 @@ namespace timbre.Services;
 
 public sealed class CohereTranscriptionClient : ITranscriptionClient
 {
-    private static readonly Uri Endpoint = new("https://api.cohere.com/v2/audio/transcriptions");
-
     private readonly TranscriptionHttpExecutor _httpExecutor;
 
     public CohereTranscriptionClient(HttpClient httpClient)
@@ -21,20 +19,9 @@ public sealed class CohereTranscriptionClient : ITranscriptionClient
         string? language,
         CancellationToken cancellationToken = default)
     {
-        var resolvedModel = TranscriptionProviderCatalog.NormalizeModel(TranscriptionProvider.Cohere, model);
-        var requestLanguage = TranscriptionProviderCatalog.NormalizeRequestLanguage(TranscriptionProvider.Cohere, language);
-
         return _httpExecutor.TranscribeAsync(
             audioBytes,
-            new TranscriptionHttpRequestSpec
-            {
-                ProviderName = "Cohere",
-                Endpoint = Endpoint,
-                ApiKey = apiKey,
-                Model = resolvedModel,
-                Language = requestLanguage,
-                Authorization = TranscriptionHttpAuthorization.Bearer(apiKey),
-            },
+            TranscriptionHttpRequestSpecs.Create(TranscriptionProvider.Cohere, apiKey, model, language),
             cancellationToken);
     }
 }

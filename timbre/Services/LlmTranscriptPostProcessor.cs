@@ -1,4 +1,3 @@
-using System.Net;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
@@ -8,9 +7,6 @@ namespace timbre.Services;
 
 public sealed class LlmTranscriptPostProcessor
 {
-    private static readonly Uri CerebrasEndpoint = new("https://api.cerebras.ai/v1/chat/completions");
-    private static readonly Uri GroqEndpoint = new("https://api.groq.com/openai/v1/chat/completions");
-
     private readonly HttpClient _httpClient;
 
     public LlmTranscriptPostProcessor(HttpClient httpClient)
@@ -26,21 +22,23 @@ public sealed class LlmTranscriptPostProcessor
             return normalizedTranscript;
         }
 
-        var provider = settings.LlmPostProcessingProvider;
-        var apiKey = GetApiKey(settings, provider);
+        var providerSettings = settings.GetSettings();
+        var provider = providerSettings.Provider;
+        var definition = providerSettings.Definition;
+        var apiKey = providerSettings.ApiKey;
         if (string.IsNullOrWhiteSpace(apiKey))
         {
-            throw new TranscriptionException($"The {GetProviderDisplayName(provider)} API key is missing.", false);
+            throw new TranscriptionException($"The {providerSettings.DisplayName} API key is missing.", false);
         }
 
-        var model = GetModel(settings, provider);
+        var model = providerSettings.Model;
         if (string.IsNullOrWhiteSpace(model))
         {
-            throw new TranscriptionException($"The {GetProviderDisplayName(provider)} model is missing.", false);
+            throw new TranscriptionException($"The {providerSettings.DisplayName} model is missing.", false);
         }
 
         var prompt = NormalizePrompt(settings.LlmPostProcessingPrompt);
-        var endpoint = provider == LlmPostProcessingProvider.Cerebras ? CerebrasEndpoint : GroqEndpoint;
+        var endpoint = definition.ChatCompletionsEndpoint;
 
         var requestBody = JsonSerializer.Serialize(new
         {
@@ -83,19 +81,19 @@ public sealed class LlmTranscriptPostProcessor
             request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", apiKey.Trim());
 
             DiagnosticsLogger.Info(
-                $"LLM transcript post-processing request starting. Provider={GetProviderDisplayName(provider)}, Endpoint={endpoint}, Model={model}, TranscriptLength={normalizedTranscript.Length}." );
+                $"LLM transcript post-processing request starting. Provider={providerSettings.DisplayName}, Endpoint={endpoint}, Model={model}, TranscriptLength={normalizedTranscript.Length}." );
 
             using var response = await _httpClient.SendAsync(request, cancellationToken);
             var responseBody = await response.Content.ReadAsStringAsync(cancellationToken);
 
             DiagnosticsLogger.Info(
-                $"LLM transcript post-processing response received. Provider={GetProviderDisplayName(provider)}, Status={(int)response.StatusCode} {response.StatusCode}, BodyLength={responseBody.Length}." );
+                $"LLM transcript post-processing response received. Provider={providerSettings.DisplayName}, Status={(int)response.StatusCode} {response.StatusCode}, BodyLength={responseBody.Length}." );
 
             if (!response.IsSuccessStatusCode)
             {
                 throw new TranscriptionException(
-                    ExtractErrorMessage(responseBody, provider, (int)response.StatusCode),
-                    IsTransientStatusCode(response.StatusCode),
+                    JsonErrorMessageExtractor.Extract(responseBody, GetProviderDisplayName(provider), (int)response.StatusCode),
+                    HttpStatusUtilities.IsTransient(response.StatusCode),
                     response.StatusCode);
             }
 
@@ -107,7 +105,7 @@ public sealed class LlmTranscriptPostProcessor
         }
         catch (HttpRequestException exception)
         {
-            throw new TranscriptionException($"The transcript clean-up request could not reach {GetProviderDisplayName(provider)}.", true, null, exception);
+            throw new TranscriptionException($"The transcript clean-up request could not reach {providerSettings.DisplayName}.", true, null, exception);
         }
     }
 
@@ -121,20 +119,6 @@ public sealed class LlmTranscriptPostProcessor
         return string.IsNullOrWhiteSpace(prompt)
             ? LlmPostProcessingCatalog.DefaultPrompt
             : prompt.Trim();
-    }
-
-    private static string GetApiKey(AppSettings settings, LlmPostProcessingProvider provider)
-    {
-        return provider == LlmPostProcessingProvider.Groq
-            ? settings.LlmGroqApiKey ?? string.Empty
-            : settings.CerebrasApiKey ?? string.Empty;
-    }
-
-    private static string GetModel(AppSettings settings, LlmPostProcessingProvider provider)
-    {
-        return provider == LlmPostProcessingProvider.Groq
-            ? settings.LlmGroqModel
-            : settings.CerebrasModel;
     }
 
     private static string ExtractCleanedTranscript(string responseBody, LlmPostProcessingProvider provider)
@@ -186,50 +170,8 @@ public sealed class LlmTranscriptPostProcessor
         }
     }
 
-    private static string ExtractErrorMessage(string responseBody, LlmPostProcessingProvider provider, int statusCode)
-    {
-        try
-        {
-            using var document = JsonDocument.Parse(responseBody);
-
-            if (document.RootElement.TryGetProperty("error", out var errorElement))
-            {
-                if (errorElement.ValueKind == JsonValueKind.String && !string.IsNullOrWhiteSpace(errorElement.GetString()))
-                {
-                    return errorElement.GetString()!;
-                }
-
-                if (errorElement.ValueKind == JsonValueKind.Object &&
-                    errorElement.TryGetProperty("message", out var nestedMessage) &&
-                    nestedMessage.ValueKind == JsonValueKind.String &&
-                    !string.IsNullOrWhiteSpace(nestedMessage.GetString()))
-                {
-                    return nestedMessage.GetString()!;
-                }
-            }
-
-            if (document.RootElement.TryGetProperty("message", out var messageElement) &&
-                messageElement.ValueKind == JsonValueKind.String &&
-                !string.IsNullOrWhiteSpace(messageElement.GetString()))
-            {
-                return messageElement.GetString()!;
-            }
-        }
-        catch (JsonException)
-        {
-        }
-
-        return $"{GetProviderDisplayName(provider)} returned HTTP {statusCode}.";
-    }
-
-    private static bool IsTransientStatusCode(HttpStatusCode statusCode)
-    {
-        var numericStatusCode = (int)statusCode;
-        return numericStatusCode == 408 || numericStatusCode == 429 || numericStatusCode >= 500;
-    }
-
     private static string GetProviderDisplayName(LlmPostProcessingProvider provider)
     {
-        return provider == LlmPostProcessingProvider.Groq ? "Groq" : "Cerebras";
+        return LlmPostProcessingCatalog.Get(provider).DisplayName;
     }
 }

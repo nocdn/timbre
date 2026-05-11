@@ -113,11 +113,9 @@ public sealed class AppSettingsStore : IAppSettingsStore
 
     internal static AppSettings NormalizeSettings(AppSettings settings)
     {
-        var groq = settings.GetTranscriptionProviderSettings(TranscriptionProvider.Groq);
-        var deepgram = settings.GetTranscriptionProviderSettings(TranscriptionProvider.Deepgram);
-        var mistral = settings.GetTranscriptionProviderSettings(TranscriptionProvider.Mistral);
-        var cohere = settings.GetTranscriptionProviderSettings(TranscriptionProvider.Cohere);
-        var elevenLabs = settings.GetTranscriptionProviderSettings(TranscriptionProvider.ElevenLabs);
+        var providerSettings = settings.GetAllTranscriptionProviderSettings()
+            .ToDictionary(provider => provider.Provider);
+        TranscriptionProviderSettings Provider(TranscriptionProvider provider) => providerSettings[provider];
 
         return new AppSettings
         {
@@ -125,13 +123,13 @@ public sealed class AppSettingsStore : IAppSettingsStore
             Provider = NormalizeTranscriptionProvider(settings.Provider),
             LlmPostProcessingEnabled = settings.LlmPostProcessingEnabled,
             LlmPostProcessingProvider = NormalizeLlmPostProcessingProvider(settings.LlmPostProcessingProvider),
-            GroqApiKey = NormalizeOptionalSecret(groq.ApiKey),
+            GroqApiKey = NormalizeOptionalSecret(Provider(TranscriptionProvider.Groq).ApiKey),
             CerebrasApiKey = NormalizeOptionalSecret(settings.CerebrasApiKey),
             LlmGroqApiKey = NormalizeOptionalSecret(settings.LlmGroqApiKey),
-            DeepgramApiKey = NormalizeOptionalSecret(deepgram.ApiKey),
-            MistralApiKey = NormalizeOptionalSecret(mistral.ApiKey),
-            CohereApiKey = NormalizeOptionalSecret(cohere.ApiKey),
-            ElevenLabsApiKey = NormalizeOptionalSecret(elevenLabs.ApiKey),
+            DeepgramApiKey = NormalizeOptionalSecret(Provider(TranscriptionProvider.Deepgram).ApiKey),
+            MistralApiKey = NormalizeOptionalSecret(Provider(TranscriptionProvider.Mistral).ApiKey),
+            CohereApiKey = NormalizeOptionalSecret(Provider(TranscriptionProvider.Cohere).ApiKey),
+            ElevenLabsApiKey = NormalizeOptionalSecret(Provider(TranscriptionProvider.ElevenLabs).ApiKey),
             Hotkey = settings.Hotkey ?? HotkeyBinding.Default,
             PasteLastTranscriptHotkey = settings.PasteLastTranscriptHotkey ?? HotkeyBinding.PasteLastTranscriptDefault,
             OpenHistoryHotkey = settings.OpenHistoryHotkey ?? HotkeyBinding.OpenHistoryDefault,
@@ -142,23 +140,23 @@ public sealed class AppSettingsStore : IAppSettingsStore
             LlmPostProcessingPrompt = NormalizeLlmPostProcessingPrompt(settings.LlmPostProcessingPrompt),
             FetchedCerebrasModels = NormalizeFetchedModelList(settings.FetchedCerebrasModels),
             FetchedLlmGroqModels = NormalizeFetchedModelList(settings.FetchedLlmGroqModels),
-            CerebrasModel = NormalizeModelName(settings.CerebrasModel, LlmPostProcessingCatalog.DefaultCerebrasModel),
-            LlmGroqModel = NormalizeModelName(settings.LlmGroqModel, LlmPostProcessingCatalog.DefaultGroqModel),
-            GroqModel = groq.Model,
-            GroqLanguage = groq.Language,
-            DeepgramModel = deepgram.Model,
-            DeepgramLanguage = deepgram.Language,
-            DeepgramStreamingEnabled = deepgram.StreamingEnabled,
-            DeepgramVadSilenceThresholdSeconds = deepgram.VadSilenceThresholdSeconds,
-            MistralModel = mistral.Model,
-            MistralStreamingEnabled = mistral.StreamingEnabled,
+            CerebrasModel = LlmPostProcessingCatalog.NormalizeModel(LlmPostProcessingProvider.Cerebras, settings.CerebrasModel),
+            LlmGroqModel = LlmPostProcessingCatalog.NormalizeModel(LlmPostProcessingProvider.Groq, settings.LlmGroqModel),
+            GroqModel = Provider(TranscriptionProvider.Groq).Model,
+            GroqLanguage = Provider(TranscriptionProvider.Groq).Language,
+            DeepgramModel = Provider(TranscriptionProvider.Deepgram).Model,
+            DeepgramLanguage = Provider(TranscriptionProvider.Deepgram).Language,
+            DeepgramStreamingEnabled = Provider(TranscriptionProvider.Deepgram).StreamingEnabled,
+            DeepgramVadSilenceThresholdSeconds = Provider(TranscriptionProvider.Deepgram).VadSilenceThresholdSeconds,
+            MistralModel = Provider(TranscriptionProvider.Mistral).Model,
+            MistralStreamingEnabled = Provider(TranscriptionProvider.Mistral).StreamingEnabled,
             MistralRealtimeMode = NormalizeMistralRealtimeMode(settings.MistralRealtimeMode),
-            CohereModel = cohere.Model,
-            CohereLanguage = cohere.Language,
-            ElevenLabsModel = elevenLabs.Model,
-            ElevenLabsStreamingEnabled = elevenLabs.StreamingEnabled,
-            ElevenLabsLanguage = elevenLabs.Language,
-            ElevenLabsVadSilenceThresholdSeconds = elevenLabs.VadSilenceThresholdSeconds,
+            CohereModel = Provider(TranscriptionProvider.Cohere).Model,
+            CohereLanguage = Provider(TranscriptionProvider.Cohere).Language,
+            ElevenLabsModel = Provider(TranscriptionProvider.ElevenLabs).Model,
+            ElevenLabsStreamingEnabled = Provider(TranscriptionProvider.ElevenLabs).StreamingEnabled,
+            ElevenLabsLanguage = Provider(TranscriptionProvider.ElevenLabs).Language,
+            ElevenLabsVadSilenceThresholdSeconds = Provider(TranscriptionProvider.ElevenLabs).VadSilenceThresholdSeconds,
             HasCompletedInitialSetup = settings.HasCompletedInitialSetup,
         };
     }
@@ -308,11 +306,6 @@ public sealed class AppSettingsStore : IAppSettingsStore
         }
 
         return normalizedModels.Count == 0 ? null : normalizedModels;
-    }
-
-    private static string NormalizeModelName(string? value, string defaultValue)
-    {
-        return string.IsNullOrWhiteSpace(value) ? defaultValue : value.Trim();
     }
 
     private static string? NormalizeOptionalSecret(string? value)

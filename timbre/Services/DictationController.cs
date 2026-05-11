@@ -596,7 +596,7 @@ public sealed class DictationController : IDictationController
         {
             var chunkIndex = ++_streamingPastedChunkCount;
             var provider = _settingsStore.CurrentSettings.Provider;
-            DiagnosticsLogger.Info($"Inserting realtime transcript chunk. Provider={provider}, ChunkIndex={chunkIndex}, TextLength={text.Length}, Preview='{CreateTranscriptPreview(text)}'.");
+            DiagnosticsLogger.Info($"Inserting realtime transcript chunk. Provider={provider}, ChunkIndex={chunkIndex}, TextLength={text.Length}, Preview='{TranscriptText.Preview(text, maxLength: 80)}'.");
             await _textInsertionService.InsertTextAsync(
                 text,
                 insertionMode: TextInsertionMode.PreferUnicodeTyping,
@@ -680,16 +680,6 @@ public sealed class DictationController : IDictationController
 
         DiagnosticsLogger.Error("Realtime transcription streaming failed.", exception);
         _transcriptionCancellationTokenSource?.Cancel();
-    }
-
-    private static string CreateTranscriptPreview(string transcript)
-    {
-        if (string.IsNullOrEmpty(transcript))
-        {
-            return string.Empty;
-        }
-
-        return transcript.Length <= 80 ? transcript : transcript[..80] + "...";
     }
 
     private Exception? GetStreamingFailure()

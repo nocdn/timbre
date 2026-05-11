@@ -1,4 +1,3 @@
-using System.Net;
 using System.Net.Http.Headers;
 using System.Text.Json;
 using timbre.Models;
@@ -135,7 +134,7 @@ internal sealed class TranscriptionHttpExecutor
             {
                 throw new TranscriptionException(
                     TranscriptionHttpResponseParsers.ExtractErrorMessage(responseBody, spec.ProviderName, (int)response.StatusCode),
-                    TranscriptionHttpResponseParsers.IsTransientStatusCode(response.StatusCode),
+                    HttpStatusUtilities.IsTransient(response.StatusCode),
                     response.StatusCode);
             }
 
@@ -214,136 +213,18 @@ internal static class TranscriptionHttpResponseParsers
     public static string? ExtractRootText(string responseBody)
     {
         using var document = JsonDocument.Parse(responseBody);
-        return TryReadStringProperty(document.RootElement, "text", out var text) ? text : null;
+        return JsonErrorMessageExtractor.TryReadStringProperty(document.RootElement, "text", out var text) ? text : null;
     }
 
     public static string? ExtractDeepgramTranscript(string responseBody)
     {
         var response = JsonSerializer.Deserialize<DeepgramTranscriptionResponse>(responseBody, SerializerOptions);
-        return NormalizeTranscriptText(response?.Results?.Channels?.FirstOrDefault()?.Alternatives?.FirstOrDefault()?.Transcript);
+        return TranscriptText.NormalizeWhitespace(response?.Results?.Channels?.FirstOrDefault()?.Alternatives?.FirstOrDefault()?.Transcript);
     }
 
     public static string ExtractErrorMessage(string responseBody, string providerName, int statusCode)
     {
-        try
-        {
-            using var document = JsonDocument.Parse(responseBody);
-            var root = document.RootElement;
-
-            if (TryReadStringProperty(root, "err_msg", out var legacyMessage))
-            {
-                return legacyMessage;
-            }
-
-            if (TryReadStringProperty(root, "message", out var message))
-            {
-                return message;
-            }
-
-            if (TryReadStringProperty(root, "detail", out var detail))
-            {
-                return detail;
-            }
-
-            if (TryReadStringProperty(root, "details", out var details))
-            {
-                return details;
-            }
-
-            if (root.TryGetProperty("error", out var errorElement) &&
-                TryReadErrorElement(errorElement, out var errorMessage))
-            {
-                return errorMessage;
-            }
-
-            if (root.TryGetProperty("detail", out var detailElement) &&
-                detailElement.ValueKind == JsonValueKind.Object &&
-                TryReadErrorElement(detailElement, out var detailMessage))
-            {
-                return detailMessage;
-            }
-
-            if (root.TryGetProperty("detail", out detailElement) &&
-                detailElement.ValueKind == JsonValueKind.Array)
-            {
-                var firstMessage = detailElement.EnumerateArray()
-                    .Select(item =>
-                        TryReadStringProperty(item, "msg", out var itemMsg)
-                            ? itemMsg
-                            : TryReadStringProperty(item, "message", out var itemMessage)
-                                ? itemMessage
-                                : TryReadStringProperty(item, "detail", out var itemDetail)
-                                    ? itemDetail
-                                    : null)
-                    .FirstOrDefault(value => !string.IsNullOrWhiteSpace(value));
-
-                if (!string.IsNullOrWhiteSpace(firstMessage))
-                {
-                    return firstMessage!;
-                }
-            }
-        }
-        catch (JsonException)
-        {
-        }
-
-        return $"{providerName} returned HTTP {statusCode}.";
-    }
-
-    public static bool IsTransientStatusCode(HttpStatusCode statusCode)
-    {
-        var numericStatusCode = (int)statusCode;
-        return numericStatusCode == 408 || numericStatusCode == 429 || numericStatusCode >= 500;
-    }
-
-    private static bool TryReadErrorElement(JsonElement element, out string value)
-    {
-        value = string.Empty;
-
-        if (element.ValueKind == JsonValueKind.String && !string.IsNullOrWhiteSpace(element.GetString()))
-        {
-            value = element.GetString()!.Trim();
-            return true;
-        }
-
-        if (element.ValueKind != JsonValueKind.Object)
-        {
-            return false;
-        }
-
-        if (TryReadStringProperty(element, "message", out value) ||
-            TryReadStringProperty(element, "detail", out value) ||
-            TryReadStringProperty(element, "msg", out value))
-        {
-            return true;
-        }
-
-        return false;
-    }
-
-    private static bool TryReadStringProperty(JsonElement element, string propertyName, out string value)
-    {
-        value = string.Empty;
-
-        if (!element.TryGetProperty(propertyName, out var property) ||
-            property.ValueKind != JsonValueKind.String ||
-            string.IsNullOrWhiteSpace(property.GetString()))
-        {
-            return false;
-        }
-
-        value = property.GetString()!.Trim();
-        return true;
-    }
-
-    private static string NormalizeTranscriptText(string? value)
-    {
-        if (string.IsNullOrWhiteSpace(value))
-        {
-            return string.Empty;
-        }
-
-        return string.Join(" ", value.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
+        return JsonErrorMessageExtractor.Extract(responseBody, providerName, statusCode);
     }
 
     private sealed class DeepgramTranscriptionResponse
